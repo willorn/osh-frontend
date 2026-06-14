@@ -52,7 +52,7 @@
             :columns="eventColumns"
             :data="events"
             :pagination="eventPagination"
-            :row-key="row => row.id"
+            :row-key="row => row.rowKey || `${row.id}-${row.happenTime || ''}`"
             :scroll-x="1280"
             @update:page="changeEventPage"
             @update:page-size="changeEventPageSize"
@@ -155,7 +155,8 @@ const eventColumns = [
   { title: '模块', key: 'module', width: 140 },
   { title: '行为', key: 'actionType', width: 110, render: row => findActionLabel(row.actionType) },
   { title: '资源类型', key: 'resourceType', width: 120, render: row => findResourceLabel(row.resourceType) },
-  { title: '资源', key: 'resourceName', width: 220, ellipsis: { tooltip: true }, render: row => row.resourceName || row.resourceId || '-' },
+  { title: '资源编号', key: 'resourceNo', width: 120, render: row => row.resourceNo || '-' },
+  { title: '资源名称', key: 'resourceName', width: 220, ellipsis: { tooltip: true }, render: row => row.resourceName || '-' },
   { title: '状态', key: 'status', width: 100, render: row => h(NTag, { type: isSuccess(row.status) ? 'success' : 'error', size: 'small' }, { default: () => row.status || '-' }) },
   { title: '耗时', key: 'durationMs', width: 100, render: row => `${row.durationMs || 0} ms` },
   { title: '路径', key: 'requestUri', minWidth: 220, ellipsis: { tooltip: true } }

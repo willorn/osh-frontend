@@ -9,6 +9,7 @@
 
       <div class="nav-scroll-shell">
         <button
+          v-show="scrollState.enabled"
           type="button"
           class="nav-scroll-btn"
           :disabled="!scrollState.canScrollLeft"
@@ -56,6 +57,7 @@
         </div>
 
         <button
+          v-show="scrollState.enabled"
           type="button"
           class="nav-scroll-btn"
           :disabled="!scrollState.canScrollRight"
@@ -610,10 +612,10 @@ const handleSelect = (k)=>{
 }
 
 .container {
-  max-width: none;
+  max-width: 1440px;
   width: 100%;
-  margin: 0;
-  padding: 0;
+  margin: 0 auto;
+  padding: 0 16px;
   height: 60px;
   display: flex;
   align-items: center;
@@ -683,8 +685,10 @@ const handleSelect = (k)=>{
   align-items: center;
   gap: 2px;
   padding: 0 8px;
+  flex: 0 0 auto;
   width: max-content;
-  min-width: 100%;
+  min-width: max-content;
+  margin: 0 auto;
 }
 
 .nav-scroll-btn {

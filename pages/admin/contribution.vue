@@ -144,7 +144,8 @@ const contributionColumns = [
 ]
 
 const resourceColumns = [
-  { title: '资源', key: 'resourceName', width: 260, ellipsis: { tooltip: true }, render: row => row.resourceName || `#${row.resourceId}` },
+  { title: '资源编号', key: 'resourceNo', width: 120, render: row => row.resourceNo || `#${row.resourceId}` },
+  { title: '资源', key: 'resourceName', width: 260, ellipsis: { tooltip: true }, render: row => row.resourceName || '-' },
   { title: '类型', key: 'resourceType', width: 120, render: row => findResourceLabel(row.resourceType) },
   { title: '贡献人', key: 'contributorUsername', width: 140 },
   { title: '贡献点', key: 'contributionPoints', width: 110, render: row => points(row.contributionPoints) },

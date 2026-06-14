@@ -187,26 +187,48 @@
 
       <div class="source-list">
         <div v-for="source in sourceList" :key="source.id" class="source-item">
-          <div>
-            <strong>{{ source.sourceName || source.githubOwner }}</strong>
+          <div class="source-main">
+            <strong>{{ sourceDisplayName(source) }}</strong>
             <div class="source-meta">
-              {{ source.sourceType === 'org' ? '组织' : '用户' }} ·
+              {{ sourceTypeText(source) }} ·
               <a
-                :href="source.githubUrl || buildGithubProfileUrl(source.githubOwner)"
+                :href="sourceGithubUrl(source)"
                 target="_blank"
                 rel="noopener noreferrer"
                 class="source-link"
                 @click.stop
               >
-                {{ source.githubOwner }}
+                {{ sourceGithubUrl(source) }}
               </a>
               · 仓库 {{ source.repoCount || 0 }}
-              · {{ source.enabled === 1 ? '启用' : '禁用' }}
+              · {{ sourceEnabledText(source) }}
             </div>
             <div class="source-message" v-if="source.lastSyncMessage">{{ source.lastSyncMessage }}</div>
+
+            <details class="source-detail">
+              <summary>基本信息</summary>
+              <div class="source-detail-grid">
+                <span>名称</span>
+                <strong>{{ sourceDisplayName(source) }}</strong>
+                <span>GitHub 账号链接</span>
+                <a :href="sourceGithubUrl(source)" target="_blank" rel="noopener noreferrer" class="source-link">
+                  {{ sourceGithubUrl(source) }}
+                </a>
+                <span>类型</span>
+                <strong>{{ sourceTypeText(source) }}</strong>
+                <span>状态</span>
+                <strong>{{ sourceEnabledText(source) }}</strong>
+                <span>仓库数</span>
+                <strong>{{ source.repoCount || 0 }}</strong>
+                <span>最后同步</span>
+                <strong>{{ formatDate(source.lastSyncTime) || '-' }}</strong>
+                <span>备注</span>
+                <strong>{{ source.remark || '-' }}</strong>
+              </div>
+            </details>
           </div>
           <div v-if="canManageOpenProject" class="source-actions">
-            <n-button size="small" @click="editSource(source)">编辑</n-button>
+            <n-button size="small" :type="editingSourceId === source.id ? 'primary' : 'default'" @click="editSource(source)">编辑</n-button>
             <n-button size="small" :loading="syncingSourceId === source.id" @click="syncSource(source.id)">同步</n-button>
             <n-button size="small" type="error" secondary @click="deleteSource(source.id)">删除</n-button>
           </div>
@@ -218,31 +240,68 @@
       </n-alert>
 
       <template v-else>
-        <n-form :model="sourceForm" label-placement="left" label-width="92px" class="modal-form">
-          <n-form-item label="名称">
-            <n-input v-model:value="sourceForm.sourceName" placeholder="例如 juege-osh" />
-          </n-form-item>
-          <n-form-item label="账号/组织">
-            <n-input v-model:value="sourceForm.githubOwner" placeholder="GitHub owner 或 https://github.com/owner" />
-          </n-form-item>
-          <n-form-item label="类型">
-            <n-select v-model:value="sourceForm.sourceType" :options="sourceTypeOptions" />
-          </n-form-item>
-          <n-form-item label="Token">
-            <n-input v-model:value="sourceForm.accessToken" type="password" show-password-on="click" placeholder="可选，留空则不修改已有 token" />
-          </n-form-item>
-          <n-form-item label="启用">
-            <n-switch v-model:value="sourceForm.enabledBool" />
-          </n-form-item>
-          <n-form-item label="备注">
-            <n-input v-model:value="sourceForm.remark" type="textarea" :rows="2" />
-          </n-form-item>
-        </n-form>
+        <section v-if="editingSourceId" class="source-form-section editing">
+          <div class="source-form-head">
+            <strong>编辑现有数据源</strong>
+            <n-button size="small" quaternary @click="cancelEditSource">取消编辑</n-button>
+          </div>
+          <n-form :model="sourceEditForm" label-placement="left" label-width="92px" class="modal-form">
+            <n-form-item label="名称">
+              <n-input v-model:value="sourceEditForm.sourceName" placeholder="例如 juege-osh" />
+            </n-form-item>
+            <n-form-item label="GitHub 账号链接">
+              <n-input v-model:value="sourceEditForm.githubOwner" placeholder="例如 https://github.com/juege-osh" />
+            </n-form-item>
+            <n-form-item label="类型">
+              <n-select v-model:value="sourceEditForm.sourceType" :options="sourceTypeOptions" />
+            </n-form-item>
+            <n-form-item label="Token">
+              <n-input v-model:value="sourceEditForm.accessToken" type="password" show-password-on="click" placeholder="可选，留空则不修改已有 token" />
+            </n-form-item>
+            <n-form-item label="启用">
+              <n-switch v-model:value="sourceEditForm.enabledBool" />
+            </n-form-item>
+            <n-form-item label="备注">
+              <n-input v-model:value="sourceEditForm.remark" type="textarea" :rows="2" />
+            </n-form-item>
+          </n-form>
 
-        <div class="modal-actions">
-          <n-button @click="resetSourceForm">清空</n-button>
-          <n-button type="primary" :loading="savingSource" @click="saveSource">保存数据源</n-button>
-        </div>
+          <div class="modal-actions">
+            <n-button @click="cancelEditSource">取消</n-button>
+            <n-button type="primary" :loading="savingSource" @click="saveEditSource">保存编辑</n-button>
+          </div>
+        </section>
+
+        <section class="source-form-section">
+          <div class="source-form-head">
+            <strong>新增数据源</strong>
+          </div>
+          <n-form :model="sourceCreateForm" label-placement="left" label-width="92px" class="modal-form">
+            <n-form-item label="名称">
+              <n-input v-model:value="sourceCreateForm.sourceName" placeholder="例如 juege-osh" />
+            </n-form-item>
+            <n-form-item label="GitHub 账号链接">
+              <n-input v-model:value="sourceCreateForm.githubOwner" placeholder="例如 https://github.com/juege-osh" />
+            </n-form-item>
+            <n-form-item label="类型">
+              <n-select v-model:value="sourceCreateForm.sourceType" :options="sourceTypeOptions" />
+            </n-form-item>
+            <n-form-item label="Token">
+              <n-input v-model:value="sourceCreateForm.accessToken" type="password" show-password-on="click" placeholder="可选，公开仓库可不填" />
+            </n-form-item>
+            <n-form-item label="启用">
+              <n-switch v-model:value="sourceCreateForm.enabledBool" />
+            </n-form-item>
+            <n-form-item label="备注">
+              <n-input v-model:value="sourceCreateForm.remark" type="textarea" :rows="2" />
+            </n-form-item>
+          </n-form>
+
+          <div class="modal-actions">
+            <n-button @click="resetCreateSourceForm">清空新增</n-button>
+            <n-button type="primary" :loading="savingSource" @click="saveCreateSource">新增数据源</n-button>
+          </div>
+        </section>
       </template>
     </n-modal>
 
@@ -355,7 +414,9 @@ const sourceModalVisible = ref(false)
 const savingSource = ref(false)
 const sourceSyncingAll = ref(false)
 const syncingSourceId = ref(null)
-const sourceForm = reactive(emptySourceForm())
+const editingSourceId = ref(null)
+const sourceCreateForm = reactive(emptySourceForm())
+const sourceEditForm = reactive(emptySourceForm())
 
 const editModalVisible = ref(false)
 const savingEdit = ref(false)
@@ -472,39 +533,58 @@ function openSourceModal() {
 }
 
 function editSource(source) {
-  Object.assign(sourceForm, {
+  editingSourceId.value = source.id
+  Object.assign(sourceEditForm, {
     id: source.id,
-    sourceName: source.sourceName || '',
-    githubOwner: source.githubOwner || '',
-    sourceType: source.sourceType || 'user',
+    sourceName: sourceDisplayName(source),
+    githubOwner: sourceGithubUrl(source),
+    sourceType: normalizeSourceType(source.sourceType),
     accessToken: '',
-    enabledBool: source.enabled !== 0,
+    enabledBool: normalizeSourceEnabled(source),
     remark: source.remark || '',
   })
 }
 
-function resetSourceForm() {
-  Object.assign(sourceForm, emptySourceForm())
+function cancelEditSource() {
+  editingSourceId.value = null
+  Object.assign(sourceEditForm, emptySourceForm())
 }
 
-async function saveSource() {
-  if (!sourceForm.githubOwner?.trim()) {
+function resetCreateSourceForm() {
+  Object.assign(sourceCreateForm, emptySourceForm())
+}
+
+async function saveCreateSource() {
+  await saveSourceForm(sourceCreateForm, () => {
+    resetCreateSourceForm()
+  })
+}
+
+async function saveEditSource() {
+  await saveSourceForm(sourceEditForm, () => {
+    cancelEditSource()
+  })
+}
+
+async function saveSourceForm(form, afterSaved) {
+  const githubOwner = normalizeGithubOwner(form.githubOwner)
+  if (!githubOwner) {
     message.warning('请填写 GitHub 账号或组织')
     return
   }
   savingSource.value = true
   try {
     await apiSaveOpenProjectSource({
-      id: sourceForm.id,
-      sourceName: sourceForm.sourceName,
-      githubOwner: sourceForm.githubOwner,
-      sourceType: sourceForm.sourceType,
-      accessToken: sourceForm.accessToken || undefined,
-      enabled: sourceForm.enabledBool ? 1 : 0,
-      remark: sourceForm.remark,
+      id: form.id,
+      sourceName: form.sourceName?.trim() || githubOwner,
+      githubOwner,
+      sourceType: normalizeSourceType(form.sourceType),
+      accessToken: form.accessToken || undefined,
+      enabled: form.enabledBool ? 1 : 0,
+      remark: form.remark,
     })
     message.success('数据源已保存')
-    resetSourceForm()
+    afterSaved?.()
     await loadSources()
   } catch (e) {
     message.error(e?.data?.msg || '保存失败')
@@ -774,6 +854,49 @@ function emptySourceForm() {
   }
 }
 
+function normalizeGithubOwner(value) {
+  const raw = String(value || '').trim()
+  if (!raw) return ''
+  return raw
+    .replace(/^https?:\/\/github\.com\//i, '')
+    .replace(/^github\.com\//i, '')
+    .replace(/^@/, '')
+    .split(/[/?#]/)[0]
+    .trim()
+}
+
+function normalizeSourceType(type) {
+  return type === 'org' || type === 'organization' ? 'org' : 'user'
+}
+
+function normalizeSourceEnabled(source) {
+  if (source?.enabled === false || source?.enabled === 0 || source?.enabled === '0') return false
+  if (source?.status === false || source?.status === 0 || source?.status === '0') return false
+  return true
+}
+
+function sourceGithubOwner(source) {
+  return normalizeGithubOwner(source?.githubOwner || source?.githubAccount || source?.owner || source?.login)
+}
+
+function sourceGithubUrl(source) {
+  const url = source?.githubUrl || source?.profileUrl
+  if (url) return url
+  return buildGithubProfileUrl(sourceGithubOwner(source))
+}
+
+function sourceDisplayName(source) {
+  return source?.sourceName || sourceGithubOwner(source) || '-'
+}
+
+function sourceTypeText(source) {
+  return normalizeSourceType(source?.sourceType) === 'org' ? '组织' : '用户'
+}
+
+function sourceEnabledText(source) {
+  return normalizeSourceEnabled(source) ? '启用' : '禁用'
+}
+
 function emptyEditForm() {
   return {
     id: null,
@@ -865,13 +988,23 @@ onMounted(async () => {
 .pagination-wrapper { display: flex; justify-content: center; margin-top: 32px; }
 .source-modal, .edit-modal { width: min(1040px, 94vw); }
 .source-toolbar { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 14px; }
-.source-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; max-height: 260px; overflow: auto; }
+.source-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 18px; max-height: 320px; overflow: auto; }
 .source-item { display: flex; justify-content: space-between; gap: 16px; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; }
+.source-main { flex: 1; min-width: 0; }
 .source-meta, .source-message { margin-top: 4px; font-size: 12px; color: #64748b; }
 .source-link { color: #2563eb; text-decoration: none; }
 .source-link:hover { text-decoration: underline; }
 .source-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-.modal-form { border-top: 1px solid #e2e8f0; padding-top: 18px; }
+.source-detail { margin-top: 8px; font-size: 12px; color: #475569; }
+.source-detail summary { cursor: pointer; color: #4f46e5; user-select: none; }
+.source-detail-grid { display: grid; grid-template-columns: 108px minmax(0, 1fr); gap: 8px 12px; margin-top: 8px; padding: 10px; border-radius: 6px; background: #fff; border: 1px solid #e2e8f0; }
+.source-detail-grid span { color: #94a3b8; }
+.source-detail-grid strong, .source-detail-grid a { min-width: 0; word-break: break-all; font-weight: 500; }
+.source-form-section { border-top: 1px solid #e2e8f0; padding-top: 16px; margin-top: 18px; }
+.source-form-section.editing { border: 1px solid #c7d2fe; border-radius: 8px; padding: 14px; background: #f8faff; }
+.source-form-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.source-form-head strong { font-size: 14px; color: #1e293b; }
+.modal-form { padding-top: 0; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 16px; }
 .resource-editor, .contributor-editor { width: 100%; display: flex; flex-direction: column; gap: 8px; }
 .resource-row { display: grid; grid-template-columns: 120px 1.2fr 1fr auto; gap: 8px; align-items: center; }
