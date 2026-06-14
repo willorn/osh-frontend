@@ -202,6 +202,11 @@ const AuditIcon = () => h('svg', { width: 18, height: 18, viewBox: '0 0 18 18', 
   h('path', { d: 'M7 6h4M7 9h4M7 12l1 1 3-3', stroke: 'currentColor', 'stroke-width': '1.5', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' })
 ]);
 
+const OrderIcon = () => h('svg', { width: 18, height: 18, viewBox: '0 0 18 18', fill: 'none' }, [
+  h('path', { d: 'M5 2h8a1 1 0 011 1v12l-2-1-2 1-2-1-2 1-2-1V3a1 1 0 011-1z', stroke: 'currentColor', 'stroke-width': '1.5', 'stroke-linejoin': 'round' }),
+  h('path', { d: 'M7 6h4M7 9h4M7 12h2', stroke: 'currentColor', 'stroke-width': '1.5', 'stroke-linecap': 'round' })
+]);
+
 const PlanIcon = () => h('svg', { width: 18, height: 18, viewBox: '0 0 18 18', fill: 'none' }, [
   h('rect', { x: '2', y: '3', width: '14', height: '12', rx: '2', stroke: 'currentColor', 'stroke-width': '1.5' }),
   h('path', { d: 'M6 7h6M6 10h4M9 3v2', stroke: 'currentColor', 'stroke-width': '1.5', 'stroke-linecap': 'round' }),
@@ -230,6 +235,14 @@ const menus = ref([
     ]
   },
   { name: '审核', path: '/audit', match: [{ name: 'audit' }], iconComponent: AuditIcon },
+  {
+    name: '订单',
+    iconComponent: OrderIcon,
+    children: [
+      { name: '订单看板', path: '/admin/order-dashboard', match: [{ name: 'admin-order-dashboard' }], iconComponent: OrderIcon },
+      { name: '订单管理', path: '/admin/orders', match: [{ name: 'admin-orders' }], iconComponent: OrderIcon },
+    ],
+  },
   { name: '后台管理', path: '/admin/users', match: [{ name: 'admin-users' }], iconComponent: AuditIcon }
 ]);
 
@@ -449,6 +462,15 @@ onMounted(() => {
     const adminMenuIndex = menus.value.findIndex(item => item.path === '/admin/users')
     if (adminMenuIndex !== -1) {
       menus.value.splice(adminMenuIndex, 1)
+    }
+  }
+
+  const { hasAnyPermission } = usePermission()
+  const canSeeOrderMenu = hasAnyPermission('order:dashboard', 'order:list', 'order:manage', '*', '*:*:*') || auditRoleLevel >= MIN_AUDIT_ROLE_LEVEL
+  if (!canSeeOrderMenu) {
+    const orderMenuIndex = menus.value.findIndex(item => item.name === '订单')
+    if (orderMenuIndex !== -1) {
+      menus.value.splice(orderMenuIndex, 1)
     }
   }
 
