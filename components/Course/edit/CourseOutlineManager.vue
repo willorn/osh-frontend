@@ -75,6 +75,7 @@
           <span v-else class="chapter-count">{{ (chapter.children || []).length }} 节</span>
           <div v-if="editMode" class="chapter-actions" @click.stop>
             <span v-if="!isCourseLink(chapter)" class="action-link primary" @click="addSectionInline(chapter)">+ 新增小节</span>
+            <span v-if="!isCourseLink(chapter)" class="action-link primary" @click="openBatchVideoUpload(chapter)">+ 批量上传视频</span>
             <span class="action-link" @click="insertChapterAfter(ci)">在此后插入</span>
             <span class="action-link" @click="startEditChapter(chapter)">{{ isCourseLink(chapter) ? '改标题' : '编辑' }}</span>
             <span class="action-link danger" @click="confirmDeleteChapter(chapter)">删除</span>
@@ -135,6 +136,29 @@
             </div>
           </div>
 
+          <!-- 批量上传占位小节行：进度直接显示在新小节上 -->
+          <div
+            v-for="(task, ti) in tasksForChapter(chapter.id)"
+            :key="task.id"
+            class="section-row batch-task-row"
+            :class="task.stage"
+          >
+            <span class="section-num">{{ ci + 1 }}.{{ (chapter.children || []).length + ti + 1 }}</span>
+            <span class="section-dot" style="background:#2080f0"></span>
+            <span class="section-name">{{ task.title }}</span>
+            <div class="section-right batch-task-status">
+              <span v-if="task.stage === 'pending'" class="bt-wait">排队中…</span>
+              <span v-else-if="task.stage === 'uploading'" class="bt-up">上传 {{ task.percent || 0 }}%</span>
+              <span v-else-if="task.stage === 'creating'" class="bt-up">创建小节…</span>
+              <span v-else-if="task.stage === 'done'" class="bt-ok">✓ 完成</span>
+              <template v-else-if="task.stage === 'error'">
+                <span class="bt-err" :title="task.error">✕ {{ task.error || '失败' }}</span>
+                <span class="action-link primary" @click="retryTask(task)">重试</span>
+                <span class="action-link danger" @click="removeTask(task)">移除</span>
+              </template>
+            </div>
+          </div>
+
           <!-- 新增小节输入行放在排序容器外 -->
           <div v-if="addingSectionChapterId === chapter.id" class="inline-add-row">
             <span class="section-num">{{ ci + 1 }}.{{ (chapter.children || []).length + 1 }}</span>
@@ -147,6 +171,7 @@
               v-focus
             />
             <span class="action-link primary" style="margin-left:8px" @click="saveNewSection(chapter)">保存</span>
+            <span class="action-link primary" style="margin-left:8px" @click="openBatchVideoUpload(chapter)">批量上传视频</span>
             <span class="action-link" style="margin-left:8px" @click="openImportSectionModal(chapter)">引入已有课程</span>
             <span class="action-link danger" style="margin-left:8px" @click="cancelAddSection">取消</span>
           </div>
@@ -238,6 +263,49 @@
       </div>
     </div>
   </n-modal>
+
+  <!-- 批量上传视频 -->
+  <input
+    ref="batchVideoInputRef"
+    type="file"
+    accept="video/mp4,video/quicktime,video/x-msvideo,video/x-matroska,video/webm,video/*,.mp4,.mov,.avi,.mkv,.wmv,.flv,.webm"
+    multiple
+    style="display:none"
+    @change="onBatchVideoFilesSelected"
+  />
+  <!-- 自定义浮层弹窗：Teleport 到 body，固定定位居中，规避 n-modal 在本页 teleport 失效的问题 -->
+  <Teleport to="body">
+    <div v-if="showBatchUpload" class="bvu-overlay" @click.self="closeBatchUploadModal">
+      <div class="bvu-card">
+        <div class="bvu-header">
+          <span class="bvu-title">批量上传视频小节</span>
+          <span class="bvu-close" @click="closeBatchUploadModal">×</span>
+        </div>
+        <div class="bvu-body">
+          <p class="batch-tip">
+            当前章：<strong>{{ batchUploadChapter?.title || '—' }}</strong>，
+            已有 {{ batchUploadChapter?.children?.length || 0 }} 个小节，新视频将按文件名顺序追加为视频小节。
+          </p>
+          <div
+            class="batch-dropzone"
+            :class="{ dragover: batchDragover }"
+            @click="batchVideoInputRef?.click()"
+            @dragover.prevent="batchDragover = true"
+            @dragleave.prevent="batchDragover = false"
+            @drop.prevent="onBatchDrop"
+          >
+            <div class="batch-dropzone-text">请选择视频文件（可多选）</div>
+            <div class="batch-dropzone-sub">点击选择，或拖拽视频到此处 · 支持 mp4/avi/mov/mkv/wmv/flv/webm</div>
+          </div>
+          <p class="batch-hint-tip">选择后将关闭弹窗，进度会显示在该章对应的小节上；上传期间可继续给其他章节添加。</p>
+        </div>
+        <div class="bvu-footer">
+          <button class="bvu-btn" @click="closeBatchUploadModal">取消</button>
+          <button class="bvu-btn primary" @click="batchVideoInputRef?.click()">选择视频</button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
@@ -246,7 +314,7 @@ import { createDiscreteApi } from 'naive-ui';
 import { useRouter } from 'vue-router';
 import Sortable from 'sortablejs';
 import { fetchConfig } from '~/composables/useHttp';
-import { getAuthHeaders, apiAddChapter, apiAddVideoSection, apiAddTextSection, apiDeleteSection, apiGetMaterialUrl, apiGetCourseMaterials, normalizeSectionFreeFlag, apiReorderSections, apiSearchCourses, apiAddCourseLinkSection } from '~/composables/Api/Course/course';
+import { getAuthHeaders, apiAddChapter, apiAddVideoSection, apiAddTextSection, apiDeleteSection, apiGetMaterialUrl, apiGetCourseMaterials, normalizeSectionFreeFlag, apiReorderSections, apiSearchCourses, apiAddCourseLinkSection, apiUploadVideo, isAllowedVideoFile, titleFromVideoFilename } from '~/composables/Api/Course/course';
 import SectionEditModal from '~/components/Course/edit/SectionEditModal.vue';
 
 const vFocus = { mounted: (el: HTMLElement) => el.focus() };
@@ -851,6 +919,175 @@ function confirmDeleteSection(section: any) {
   });
 }
 
+// ===== 批量上传视频小节（全局串行队列，支持跨章追加） =====
+const batchVideoInputRef = ref<HTMLInputElement | null>(null);
+const showBatchUpload = ref(false);
+const batchUploadChapter = ref<any>(null);
+const batchDragover = ref(false);
+// 上传任务队列：跨章共享，逐个串行执行；占位行直接显示在对应章节下
+const uploadQueue = ref<any[]>([]);
+const queueRunning = ref(false);
+let batchUid = 0;
+
+// 取某章节当前的上传任务（占位行用）
+function tasksForChapter(chapterId: any) {
+  return uploadQueue.value.filter((t) => String(t.chapterId) === String(chapterId));
+}
+
+// 打开「选择文件」弹窗（仅选文件，不在此处上传）
+function openBatchVideoUpload(chapter: any) {
+  if (isCourseLink(chapter)) {
+    message.warning('引入课程的章不能添加小节');
+    return;
+  }
+  batchUploadChapter.value = chapter;
+  batchDragover.value = false;
+  cancelAddSection();
+  if (collapsedChapters.value.has(chapter.id)) {
+    collapsedChapters.value.delete(chapter.id);
+    collapsedChapters.value = new Set(collapsedChapters.value);
+  }
+  showBatchUpload.value = true;
+}
+
+function closeBatchUploadModal() {
+  showBatchUpload.value = false;
+  batchUploadChapter.value = null;
+  batchDragover.value = false;
+}
+
+function onBatchModalShowChange(show: boolean) {
+  if (!show) closeBatchUploadModal();
+  else showBatchUpload.value = show;
+}
+
+function onBatchVideoFilesSelected(e: Event) {
+  const input = e.target as HTMLInputElement;
+  // 先复制成数组再清空 input：input.files 是活引用，input.value='' 会把它清空。
+  const selected = Array.from(input.files || []);
+  input.value = '';
+  const chapter = batchUploadChapter.value;
+  if (!selected.length || !chapter) return;
+  enqueueFiles(chapter, selected);
+  closeBatchUploadModal();
+}
+
+function onBatchDrop(e: DragEvent) {
+  batchDragover.value = false;
+  const chapter = batchUploadChapter.value;
+  const selected = Array.from(e.dataTransfer?.files || []);
+  if (!selected.length || !chapter) return;
+  enqueueFiles(chapter, selected);
+  closeBatchUploadModal();
+}
+
+// 把选中的视频追加到全局队列末尾，并启动处理
+function enqueueFiles(chapter: any, fileList: File[]) {
+  const valid = fileList.filter(isAllowedVideoFile);
+  const skipped = fileList.length - valid.length;
+  if (!valid.length) {
+    message.warning('未选择有效视频文件');
+    return;
+  }
+  if (skipped > 0) message.warning(`已忽略 ${skipped} 个非视频文件`);
+
+  // 计算排序：该章已有小节数 + 该章队列中已占位（未失败）的任务数
+  const occupied = uploadQueue.value.filter(
+    (t) => String(t.chapterId) === String(chapter.id) && t.stage !== 'error',
+  ).length;
+  const baseSort = (chapter.children?.length || 0) + occupied;
+
+  valid.forEach((file, i) => {
+    uploadQueue.value.push({
+      id: `bt_${Date.now()}_${batchUid++}`,
+      courseId: props.courseId,
+      chapterId: chapter.id,
+      chapterTitle: chapter.title,
+      title: titleFromVideoFilename(file.name),
+      fileName: file.name,
+      file,
+      sort: baseSort + i + 1,
+      stage: 'pending',
+      percent: 0,
+      error: '',
+      sectionId: null,
+    });
+  });
+  message.success(`已加入 ${valid.length} 个视频到上传队列`);
+  processQueue();
+}
+
+// 串行处理队列：一次只上传一个，避免并发打满后端
+async function processQueue() {
+  if (queueRunning.value) return;
+  queueRunning.value = true;
+  try {
+    let task: any;
+    while ((task = uploadQueue.value.find((t) => t.stage === 'pending'))) {
+      await runOneTask(task);
+    }
+  } finally {
+    queueRunning.value = false;
+  }
+  // 本轮全部跑完：若有成功创建的小节，刷新目录把占位行替换为真实小节
+  const hadDone = uploadQueue.value.some((t) => t.stage === 'done');
+  if (hadDone) await loadOutline();
+  // 清掉已完成任务（真实小节已显示），保留失败行供重试/移除
+  uploadQueue.value = uploadQueue.value.filter((t) => t.stage !== 'done');
+  // 处理期间若又有新任务加入，继续处理
+  if (uploadQueue.value.some((t) => t.stage === 'pending')) {
+    processQueue();
+  }
+}
+
+async function runOneTask(task: any) {
+  try {
+    task.stage = 'uploading';
+    task.percent = 0;
+    task.error = '';
+    const uploadRes: any = await apiUploadVideo(task.file, task.title, null, (p: number) => {
+      task.percent = p;
+    });
+    if (uploadRes?.code !== 200 || !uploadRes?.data) {
+      throw new Error(uploadRes?.msg || '视频上传失败');
+    }
+    const relativePath = uploadRes.data.relativePath || uploadRes.data.url;
+    if (!relativePath) throw new Error('上传成功但未返回视频路径');
+
+    task.stage = 'creating';
+    const saveRes: any = await apiAddVideoSection({
+      courseId: Number(task.courseId),
+      parentId: task.chapterId,
+      title: task.title,
+      sort: task.sort,
+      freeFlag: 0,
+      mediaUrl: relativePath,
+      fileSize: uploadRes.data.size || task.file?.size || 0,
+      duration: 0,
+    });
+    if (saveRes?.code !== 200) throw new Error(saveRes?.msg || '创建小节失败');
+    task.sectionId = saveRes.data;
+    task.stage = 'done';
+  } catch (err: any) {
+    const raw = err?.data?.msg || err?.data?.data || err?.message || '上传失败';
+    task.error = /401|Unauthorized|未登录|登录已过期/.test(String(raw))
+      ? '登录已过期，请重新登录'
+      : raw;
+    task.stage = 'error';
+  }
+}
+
+function retryTask(task: any) {
+  task.stage = 'pending';
+  task.percent = 0;
+  task.error = '';
+  processQueue();
+}
+
+function removeTask(task: any) {
+  uploadQueue.value = uploadQueue.value.filter((t) => t.id !== task.id);
+}
+
 // ===== 小节内容编辑（保留弹窗备用，主要用跳转页面） =====
 const showSectionEdit = ref(false);
 const editingSection = ref<any>(null);
@@ -1069,4 +1306,65 @@ const editingSection = ref<any>(null);
 }
 .section-right { flex-shrink: 0; display: flex; align-items: center; gap: 12px; }
 .free-label { font-size: 12px; color: #18a058; }
+
+/* 批量上传 - 自定义浮层弹窗 */
+.bvu-overlay {
+  position: fixed; inset: 0; z-index: 4000;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex; align-items: center; justify-content: center;
+}
+.bvu-card {
+  width: 560px; max-width: 92vw;
+  background: #fff; border-radius: 12px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.25);
+  overflow: hidden; display: flex; flex-direction: column;
+}
+.bvu-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px; border-bottom: 1px solid #f0f0f0;
+}
+.bvu-title { font-size: 16px; font-weight: 600; color: #222; }
+.bvu-close {
+  cursor: pointer; font-size: 22px; line-height: 1; color: #999;
+  width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+  border-radius: 6px;
+}
+.bvu-close:hover { background: #f5f5f5; color: #333; }
+.bvu-body { padding: 20px; font-size: 14px; color: #444; }
+.bvu-footer {
+  display: flex; justify-content: flex-end; gap: 12px;
+  padding: 14px 20px; border-top: 1px solid #f0f0f0;
+}
+.bvu-btn {
+  padding: 7px 18px; border-radius: 6px; cursor: pointer; font-size: 14px;
+  border: 1px solid #d9d9d9; background: #fff; color: #333; transition: all .15s;
+}
+.bvu-btn:hover { border-color: #18a058; color: #18a058; }
+.bvu-btn.primary { background: #18a058; border-color: #18a058; color: #fff; }
+.bvu-btn.primary:hover { background: #15924f; }
+
+.batch-tip { margin: 0 0 12px; line-height: 1.6; color: #666; }
+.batch-dropzone {
+  padding: 32px 16px; text-align: center; cursor: pointer;
+  border: 2px dashed #ccc; border-radius: 10px; background: #fafafa;
+  transition: border-color .15s, background .15s;
+}
+.batch-dropzone:hover, .batch-dropzone.dragover { border-color: #2080f0; background: #f0f7ff; }
+.batch-dropzone-text { font-size: 15px; font-weight: 600; color: #333; }
+.batch-dropzone-sub { margin-top: 6px; font-size: 12px; color: #999; }
+.batch-hint-tip { margin: 12px 0 0; font-size: 12px; color: #999; line-height: 1.6; }
+
+/* 批量上传 - 目录中的占位小节行 */
+.batch-task-row { background: #fafafa; }
+.batch-task-row.uploading { background: #f0f7ff; }
+.batch-task-row.creating { background: #f0f7ff; }
+.batch-task-row.error { background: #fff5f5; }
+.batch-task-status { font-size: 12px; }
+.batch-task-status .bt-wait { color: #999; }
+.batch-task-status .bt-up { color: #2080f0; }
+.batch-task-status .bt-ok { color: #18a058; }
+.batch-task-status .bt-err {
+  color: #d03050; max-width: 220px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
 </style>
