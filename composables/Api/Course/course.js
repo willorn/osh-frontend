@@ -394,6 +394,23 @@ export function apiUploadVideo(file, videoName, sectionId, onProgress) {
   });
 }
 
+const ALLOWED_VIDEO_EXTENSIONS = ['mp4', 'avi', 'mov', 'mkv', 'wmv', 'flv', 'webm'];
+
+/** 从视频文件名提取小节标题（去扩展名） */
+export function titleFromVideoFilename(filename) {
+  const name = String(filename || '').trim();
+  if (!name) return '未命名小节';
+  const dot = name.lastIndexOf('.');
+  const base = dot > 0 ? name.slice(0, dot) : name;
+  return base.trim() || '未命名小节';
+}
+
+export function isAllowedVideoFile(file) {
+  if (!file?.name) return false;
+  const ext = file.name.includes('.') ? file.name.split('.').pop().toLowerCase() : '';
+  return ALLOWED_VIDEO_EXTENSIONS.includes(ext);
+}
+
 /** 上传章节视频 POST /pc/course/section/video/upload */
 export async function apiUploadSectionVideo(file, courseId, sectionId) {
   const form = new FormData();
