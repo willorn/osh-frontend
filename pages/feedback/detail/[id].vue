@@ -1196,6 +1196,22 @@ function getToken() {
   return ''
 }
 
+// 获取正确的上传URL
+function getUploadUrl() {
+  if (process.server) {
+    return 'http://localhost:8081/pc/upload'
+  }
+
+  const hostname = window.location.hostname
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    // 本地开发：通过 Nuxt 代理
+    return '/api/upload'
+  } else {
+    // 生产环境：直接使用后端地址
+    return 'http://43.242.200.25:8081/pc/upload'
+  }
+}
+
 async function uploadFeedbackImages(imageItems) {
   if (!imageItems.length) {
     return []
@@ -1214,12 +1230,18 @@ async function uploadSingleFeedbackImage(imageItem, index) {
   formData.append('file', imageItem.file)
   formData.append('type', 'image')
 
+  const token = getToken()
+
   try {
-    const response = await fetch('/api/pc/upload', {
+    const response = await fetch(getUploadUrl(), {
       method: 'POST',
       body: formData,
       headers: {
-        Authorization: `Bearer ${getToken()}`
+        'appid': 'bd9d01ecc75dbbaaefce',
+        ...(token ? {
+          'Authorization': `Bearer ${token}`,
+          'token': token
+        } : {})
       }
     })
 
