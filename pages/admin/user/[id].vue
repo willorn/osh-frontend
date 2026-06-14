@@ -257,7 +257,8 @@ const behaviorColumns = [
   { title: '时间', key: 'happenTime', width: 170, render: row => formatDisplayTime(row.happenTime) },
   { title: '模块', key: 'module', width: 130 },
   { title: '动作', key: 'actionType', width: 100 },
-  { title: '资源', key: 'resourceName', minWidth: 180, ellipsis: { tooltip: true }, render: row => row.resourceName || row.resourceId || '-' },
+  { title: '资源编号', key: 'resourceNo', width: 120, render: row => row.resourceNo || '-' },
+  { title: '资源名称', key: 'resourceName', minWidth: 180, ellipsis: { tooltip: true }, render: row => row.resourceName || '-' },
   { title: '状态', key: 'status', width: 90, render: row => h(NTag, { type: isBehaviorSuccess(row.status) ? 'success' : 'error', size: 'small' }, { default: () => row.status || '-' }) },
   { title: '耗时', key: 'durationMs', width: 90, render: row => `${row.durationMs || 0} ms` },
 ]
