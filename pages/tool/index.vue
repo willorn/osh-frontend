@@ -212,7 +212,6 @@
 
                     <div class="action-group">
                     <button
-                      v-if="canVoteGood"
                       class="row-action-btn vote good"
                       :class="{ active: Number(item.voteType || 0) === 1 }"
                       type="button"
@@ -221,7 +220,6 @@
                       👍 {{ item.goodCount || 0 }}
                     </button>
                     <button
-                      v-if="canVoteBad"
                       class="row-action-btn vote bad"
                       :class="{ active: Number(item.voteType || 0) === 3 }"
                       type="button"
@@ -230,7 +228,6 @@
                       👎 {{ item.badCount || 0 }}
                     </button>
                     <button
-                      v-if="canCreateQuestion"
                       class="row-action-btn question"
                       type="button"
                       @click.stop="handleOpenQuestionModal(item)"
@@ -354,6 +351,7 @@
       preset-resource-type="tool"
       :preset-resource-no="questionToolId"
       :lock-resource="true"
+      :tool-mode="true"
       @success="handleQuestionCreated"
     />
   </div>
@@ -406,8 +404,6 @@ const canRemoveCollection = computed(() => permissionList.value.includes('tool:c
 const canCollect = computed(() => canAddCollection.value || canRemoveCollection.value);
 const canVoteGood = computed(() => permissionList.value.includes('tool:vote:good'));
 const canVoteBad = computed(() => permissionList.value.includes('tool:vote:bad'));
-const canCreateQuestion = computed(() => permissionList.value.includes('qna:question:create'));
-
 const queryParams = reactive({
   keyword: '',
   no: '',
@@ -755,9 +751,10 @@ function handleEditTool(item) {
 }
 
 function handleOpenQuestionModal(item) {
-  if (!canCreateQuestion.value) {
-    const { message } = createDiscreteApi(['message']);
-    message.warning('暂无工具提问权限');
+  const { message } = createDiscreteApi(['message']);
+  if (!isLoggedIn.value) {
+    message.warning('请先登录后再提问');
+    navigateTo('/login?from=/tool');
     return;
   }
   questionToolId.value = Number(item.id);
@@ -884,9 +881,6 @@ const canExpandTool = (item) => {
   if (!item) {
     return false;
   }
-  if (item.resourceType === 'FREE') {
-    return true;
-  }
   const currentLevel = Number(getUserMemberLevel() || 0);
   const requiredLevel = Number(item.level || 0);
   if (currentLevel > requiredLevel) {
@@ -898,7 +892,20 @@ const canExpandTool = (item) => {
 const toggleExpand = (item) => {
   const { message } = createDiscreteApi(['message']);
   const nextExpanded = !item.isExpanded;
+  const requiresLoginToExpand = nextExpanded
+    && item
+    && !isLoggedIn.value;
+  if (requiresLoginToExpand) {
+    message.warning('请先登录后再使用该工具');
+    navigateTo('/login?from=/tool');
+    return;
+  }
   if (nextExpanded && !canExpandTool(item)) {
+    if (!isLoggedIn.value) {
+      message.warning('请先登录后再使用该工具');
+      navigateTo('/login?from=/tool');
+      return;
+    }
     message.warning('当前工具点数不足，无法展开该工具');
     return;
   }
@@ -1077,16 +1084,13 @@ const handleDoCollect = async (toolId) => {
   const { message } = createDiscreteApi(['message']);
   const tool = toolList.value.find((item) => item.id === toolId);
   if (!tool) return;
+  if (!isLoggedIn.value) {
+    message.warning('请先登录后再收藏工具');
+    navigateTo('/login?from=/tool');
+    return;
+  }
 
   const wasCollected = tool.isFavorite;
-  if (!wasCollected && !canAddCollection.value) {
-    message.warning('暂无收藏工具权限');
-    return;
-  }
-  if (wasCollected && !canRemoveCollection.value) {
-    message.warning('暂无取消收藏权限');
-    return;
-  }
   const previousCount = tool.favoriteCount || tool.collectionCount || 0;
   tool.isFavorite = !wasCollected;
   tool.collectionFlag = wasCollected ? 0 : 1;
@@ -1118,6 +1122,11 @@ const handleDoCollect = async (toolId) => {
 const handleToolVote = async (item, type) => {
   const { message } = createDiscreteApi(['message']);
   if (!item?.id) return;
+  if (!isLoggedIn.value) {
+    message.warning('请先登录后再评价工具');
+    navigateTo('/login?from=/tool');
+    return;
+  }
   if (type === 1 && !canVoteGood.value) {
     message.warning('暂无点赞工具权限');
     return;
