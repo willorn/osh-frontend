@@ -75,6 +75,14 @@ export async function apiCreateQuestion(data) {
   });
 }
 
+/** 工具模块专用提问 POST /pc/tool/question/create */
+export async function apiCreateToolQuestion(data) {
+  return qnaFetch(`${fetchConfig.baseURL}/tool/question/create`, {
+    method: 'POST',
+    body: data,
+  });
+}
+
 /** 发布问题 POST /pc/qna/question/publish */
 export async function apiPublishQuestion(questionId) {
   return qnaFetch(`${QNA_BASE}/question/publish`, {
