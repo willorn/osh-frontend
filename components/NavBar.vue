@@ -241,7 +241,7 @@ const menus = ref([
     path: '/admin/users',
     match: [{ name: 'admin-users' }, { name: 'admin-behavior' }, { name: 'admin-contribution' }, { name: 'admin-user-id' }],
     iconComponent: AuditIcon
-  }
+  },
   {
     name: '订单',
     iconComponent: OrderIcon,
