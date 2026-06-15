@@ -2,34 +2,29 @@
  * 原生 WebSocket 连接管理 + 消息通知状态
  *
  * 连接地址：ws://host/ws/connect?token=xxx
- * 消息格式：QAAnswerNotifyDTO JSON
- *   { type, questionId, questionSummary, answererNickname, answerSummary, createTime }
+ * 消息格式：WsNotifyMessage JSON
+ *   { type, title, content, jumpUrl, bizId, createTime }
  */
 
-// ─── 全局单例状态 ─────────────────────────────────────────────────────────────
-
 export const useNotifications = () => useState('ws_notifications', () => [])
-export const useUnreadCount   = () => useState('ws_unread', () => 0)
-export const useWsStatus      = () => useState('ws_status', () => 'disconnected')
-/** 开源项目广播公告列表（type=NEW_OPEN_PROJECT） */
+export const useUnreadCount = () => useState('ws_unread', () => 0)
+export const useWsStatus = () => useState('ws_status', () => 'disconnected')
 export const useProjectAnnouncements = () => useState('ws_project_announcements', () => [])
 export const useToolUserNoticeRefreshFlag = () => useState('ws_tool_user_notice_refresh', () => 0)
+export const useHomepageAnnouncementRefreshFlag = () => useState('ws_homepage_announcement_refresh', () => 0)
 
-// 广播型消息：只驱动页面局部刷新/公告展示，不进入每个用户的小铃铛通知列表
 const BROADCAST_TYPES = new Set([
   'NEW_OPEN_PROJECT',
   'TOOL_USER_NOTICE_REFRESH',
+  'HOMEPAGE_ANNOUNCEMENT_REFRESH',
   'SECKILL_NOTICE_UPDATE',
   'SECKILL_DYNAMIC_NEW',
 ])
 
-// ─── WebSocket 单例（非响应式）────────────────────────────────────────────────
 let _ws = null
 let _heartbeatTimer = null
 let _reconnectTimer = null
-let _manualClose = false   // 主动断开时不重连
-
-// ─── 工具函数 ─────────────────────────────────────────────────────────────────
+let _manualClose = false
 
 function getWsBaseURL() {
   const hostname = window.location.hostname
@@ -43,17 +38,42 @@ function resolveToken() {
     const cookie = useCookie('token').value
     if (cookie) return cookie
   } catch {}
+
   return localStorage.getItem('token') || localStorage.getItem('Token') || ''
 }
 
-// ─── 主 Composable ────────────────────────────────────────────────────────────
+function parseJsonSafely(value) {
+  if (!value || typeof value !== 'string') {
+    return null
+  }
+
+  try {
+    return JSON.parse(value)
+  } catch {
+    return null
+  }
+}
+
+function isHomepageRefreshMessage(msg) {
+  if (msg.type !== 'HOMEPAGE_ANNOUNCEMENT_REFRESH') {
+    return false
+  }
+
+  if (msg.bizId === 'homepage') {
+    return true
+  }
+
+  const contentPayload = parseJsonSafely(msg.content)
+  return contentPayload?.module === 'homepage'
+}
 
 export function useWebSocket() {
   const notifications = useNotifications()
-  const unreadCount   = useUnreadCount()
-  const wsStatus      = useWsStatus()
+  const unreadCount = useUnreadCount()
+  const wsStatus = useWsStatus()
   const projectAnnouncements = useProjectAnnouncements()
   const toolUserNoticeRefreshFlag = useToolUserNoticeRefreshFlag()
+  const homepageAnnouncementRefreshFlag = useHomepageAnnouncementRefreshFlag()
 
   function connect() {
     if (!process.client) return
@@ -75,10 +95,9 @@ export function useWebSocket() {
     }
 
     _ws.onmessage = (event) => {
-      if (event.data === 'pong') return   // 心跳回包
+      if (event.data === 'pong') return
+
       try {
-        // 后端统一消息格式 WsNotifyMessage：
-        // { type, title, content, jumpUrl, bizId, createTime }
         const payload = JSON.parse(event.data)
         const msg = {
           id: `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
@@ -91,11 +110,7 @@ export function useWebSocket() {
           read: false,
         }
 
-        // // 广播类型消息：不推送到小铃铛通知列表
-        // const BROADCAST_TYPES = ['NEW_OPEN_PROJECT', 'TOOL_USER_NOTICE_REFRESH']
-        // const isBroadcast = BROADCAST_TYPES.includes(msg.type)
-
-         const isBroadcast = BROADCAST_TYPES.has(msg.type)
+        const isBroadcast = BROADCAST_TYPES.has(msg.type)
 
         if (!isBroadcast) {
           notifications.value.unshift(msg)
@@ -103,7 +118,6 @@ export function useWebSocket() {
           unreadCount.value++
         }
 
-        // 开源项目广播：写入公告列表
         if (msg.type === 'NEW_OPEN_PROJECT') {
           projectAnnouncements.value.unshift(msg)
           if (projectAnnouncements.value.length > 10) {
@@ -116,13 +130,16 @@ export function useWebSocket() {
           if (process.client && msg.title) {
             try {
               window.dispatchEvent(new CustomEvent('tool-announcement-toast', {
-                detail: { title: msg.title }
+                detail: { title: msg.title },
               }))
-              console.log('title : ' , msg.title);
             } catch (err) {
               console.error('[WS] 工具公告提示派发失败', err)
             }
           }
+        }
+
+        if (isHomepageRefreshMessage(msg)) {
+          homepageAnnouncementRefreshFlag.value = Date.now()
         }
       } catch (e) {
         console.error('[WS] 消息解析失败', e)
@@ -134,7 +151,6 @@ export function useWebSocket() {
       _stopHeartbeat()
       console.log('[WS] 连接关闭')
       if (!_manualClose) {
-        // 5 秒后自动重连
         _reconnectTimer = setTimeout(connect, 5000)
       }
     }
@@ -174,10 +190,20 @@ export function useWebSocket() {
     unreadCount.value = 0
   }
 
-  return { notifications, unreadCount, wsStatus, connect, disconnect, markAllRead, markRead, clearAll, projectAnnouncements, toolUserNoticeRefreshFlag }
+  return {
+    notifications,
+    unreadCount,
+    wsStatus,
+    connect,
+    disconnect,
+    markAllRead,
+    markRead,
+    clearAll,
+    projectAnnouncements,
+    toolUserNoticeRefreshFlag,
+    homepageAnnouncementRefreshFlag,
+  }
 }
-
-// ─── 心跳 ─────────────────────────────────────────────────────────────────────
 
 function _startHeartbeat() {
   _stopHeartbeat()

@@ -1,53 +1,8 @@
 <template>
   <div class="home-page">
 
-    <!-- 公告栏 -->
-    <section class="notice-section">
-      <div class="notice-bar">
-        <div class="notice-label">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path d="M8 1l1.8 3.6L14 5.6l-3 2.9.7 4.1L8 10.5l-3.7 2.1.7-4.1-3-2.9 4.2-.6z" stroke="white" stroke-width="1.3" stroke-linejoin="round" fill="rgba(255,255,255,0.2)"/>
-          </svg>
-          <span>公告</span>
-        </div>
-        <div class="notice-scroll-wrap">
-          <div
-            class="notice-scroll-track"
-            :style="{ animationPlayState: noticePaused ? 'paused' : 'running' }"
-            @mouseenter="noticePaused = true"
-            @mouseleave="noticePaused = false"
-          >
-            <span class="notice-item" v-for="(n, i) in (noticesFromApi.length ? [...noticesFromApi, ...noticesFromApi] : [...notices, ...notices])" :key="i">
-              <span class="notice-dot" :style="{ background: n.color }"></span>
-              {{ n.text }}
-              <span class="notice-sep">｜</span>
-            </span>
-          </div>
-        </div>
-      </div>
-      <div class="notice-bar notice-bar-2">
-        <div class="notice-label notice-label-2">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path d="M2 4h12M2 8h12M2 12h8" stroke="white" stroke-width="1.3" stroke-linecap="round"/>
-          </svg>
-          <span>动态</span>
-        </div>
-        <div class="notice-scroll-wrap">
-          <div
-            class="notice-scroll-track"
-            :style="{ animationPlayState: noticePaused2 ? 'paused' : 'running' }"
-            @mouseenter="noticePaused2 = true"
-            @mouseleave="noticePaused2 = false"
-          >
-            <span class="notice-item" v-for="(n, i) in (dynamicsFromApi.length ? [...dynamicsFromApi, ...dynamicsFromApi] : [...notices2, ...notices2])" :key="'n2-'+i">
-              <span class="notice-dot" :style="{ background: n.color }"></span>
-              {{ n.text }}
-              <span class="notice-sep">｜</span>
-            </span>
-          </div>
-        </div>
-      </div>
-    </section>
+    <!-- 新的公告栏组件 -->
+    <HomepageAnnouncementBoard v-bind="homepageAnnouncementBoardProps" />
 
     <!-- Hero Banner - 2x2 Grid Carousel -->
     <section class="hero-section" @mouseenter="pauseCarousel" @mouseleave="resumeCarousel">
@@ -409,101 +364,57 @@
     <section class="pricing-section">
       <div class="section-container">
         <div class="features-header">
-          <h2 class="section-title" style="color:#1e1b4b">选择适合你的套餐</h2>
-          <p class="section-subtitle">不同档次满足不同学习需求，随时升级，终身受益</p>
+          <h2 class="section-title" style="color:#1e1b4b">选择套餐</h2>
+          <p class="section-subtitle">VIP 支持月付或年付，小班用户仅支持年付。</p>
         </div>
 
-        <div class="pricing-horizontal">
+        <div class="pricing-top-row member-plan-row">
+          <div
+            v-for="plan in memberModePlans"
+            :key="plan.id"
+            class="pricing-card member-plan-card"
+            :class="[
+              plan.featured ? 'member-plan-card-featured' : '',
+              plan.tone === 'small-class' ? 'pricing-class-card member-plan-card-class' : ''
+            ]"
+          >
+            <div class="member-plan-topline">
+              <span class="member-plan-type">{{ plan.memberType }}</span>
+              <span class="member-plan-period">{{ plan.period }}</span>
+            </div>
 
-          <!-- 觉哥就业小班（上面） -->
-          <div class="pricing-h-card pricing-h-class">
-            <div class="ph-top-row">
-              <div class="ph-left">
-                <div class="ph-badge">⭐ 强烈推荐</div>
-                <h3 class="ph-title">觉哥就业小班</h3>
-                <p class="ph-sub">就业培训 · 面试指导 · 专人专属规划</p>
-                <div class="ph-price">
-                  <span class="ph-price-num">¥2199</span>
-                  <span class="ph-price-unit">起 / 永久</span>
-                </div>
-              </div>
-              <div class="ph-middle">
-                <div class="ph-highlights">
-                  <div class="ph-expand-step" v-for="(step, i) in classTechPath" :key="'t'+i">
-                    <span class="ph-expand-step-num">{{ i + 1 }}</span>
-                    <span class="ph-expand-step-title">{{ step.title }}</span>
-                    <span class="ph-expand-step-desc">{{ step.desc }}</span>
-                  </div>
-                </div>
-              </div>
-              <div class="ph-right">
-                <ul class="ph-feat-list">
-                  <li v-for="(f, i) in classFeatures" :key="i">
-                    <span class="ph-check">✓</span>{{ f }}
-                  </li>
-                </ul>
-                <button class="ph-btn ph-btn-class" @click="navigateTo('/course/1')">立即报名小班 →</button>
+            <div class="member-plan-title-row">
+              <h3 class="member-plan-title">{{ plan.name }}</h3>
+              <span v-if="plan.badge" class="member-plan-badge">{{ plan.badge }}</span>
+            </div>
+
+            <p class="member-plan-desc">{{ plan.description }}</p>
+
+            <div class="member-plan-benefits">
+              <div v-for="benefit in plan.benefits" :key="benefit.title" class="member-plan-benefit">
+                <strong>{{ benefit.title }}</strong>
+                <span>{{ benefit.description }}</span>
               </div>
             </div>
-            <!-- 右上角可展开按钮 -->
-            <button class="ph-expand-btn" @click="classExpanded = !classExpanded">
-              {{ classExpanded ? '收起' : '了解更多' }}
-              <svg :class="{ 'ph-expand-icon-open': classExpanded }" class="ph-expand-icon" width="12" height="12" viewBox="0 0 12 12" fill="none">
-                <path d="M3 5l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
+
+            <div class="member-plan-price-row">
+              <div class="member-plan-price-main">
+                <strong>{{ plan.price }}</strong>
+                <span>{{ plan.priceSuffix }}</span>
+              </div>
+              <del v-if="plan.originalPrice">{{ plan.originalPrice }}</del>
+            </div>
+
+            <small class="member-plan-unit-price">{{ plan.unitPrice }}</small>
+
+            <button
+              class="pricing-btn"
+              :class="plan.featured ? 'pricing-btn-featured' : ''"
+              @click="navigateTo('/user/member')"
+            >
+              {{ plan.buttonText }}
             </button>
-            <!-- 展开内容 -->
-            <div v-if="classExpanded" class="ph-expand-panel">
-              <div class="ph-expand-grid">
-                <div class="ph-expand-block">
-                  <h4 class="ph-expand-block-title">👥 学员情况</h4>
-                  <div class="ph-expand-item" v-for="(s, i) in classStudents" :key="'s'+i">
-                    <span class="ph-expand-dot"></span>
-                    <span>{{ s }}</span>
-                  </div>
-                </div>
-                <div class="ph-expand-block">
-                  <h4 class="ph-expand-block-title">🎯 服务亮点</h4>
-                  <div class="ph-hl" v-for="(h, i) in classHighlights" :key="'h'+i">
-                    <span class="ph-hl-icon">{{ h.icon }}</span>
-                    <div>
-                      <div class="ph-hl-title">{{ h.title }}</div>
-                      <div class="ph-hl-desc">{{ h.desc }}</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
-
-          <!-- VIP 会员（下面） -->
-          <div class="pricing-h-card pricing-h-vip">
-            <div class="ph-left">
-              <div class="ph-icon-vip">👑</div>
-              <h3 class="ph-title">VIP 会员</h3>
-              <p class="ph-sub">全站畅学，尊享特权</p>
-              <div class="ph-price">
-                <span class="ph-price-num">¥188</span>
-                <span class="ph-price-unit">/ 年</span>
-              </div>
-            </div>
-            <div class="ph-middle ph-middle-vip">
-              <div class="ph-vip-intro">
-                <p class="ph-vip-slogan">🚀 一次开通，全年畅学无忧</p>
-                <p class="ph-vip-desc">解锁全站 1000+ 付费课程、VIP 专属直播课、专属题库全解锁、优先答疑通道、学习进度云同步，随时随地高效学习。</p>
-                <p class="ph-vip-tip">💡 支持随时升级觉哥就业小班</p>
-              </div>
-            </div>
-            <div class="ph-right">
-              <ul class="ph-feat-list">
-                <li v-for="(feat, j) in vipFeatures" :key="'r'+j">
-                  <span class="ph-check">✓</span>{{ feat }}
-                </li>
-              </ul>
-              <button class="ph-btn ph-btn-vip" @click="navigateTo('/course/1')">立即开通 VIP</button>
-            </div>
-          </div>
-
         </div>
       </div>
     </section>
@@ -1055,6 +966,7 @@
 <script setup>
 import { h, ref, computed, onMounted, onUnmounted } from 'vue'
 import { fetchConfig } from '~/composables/useHttp'
+import HomepageAnnouncementBoard from '~/components/Homepage/AnnouncementBoard.vue'
 
 useHead({
   title: '开源助手',
@@ -1741,7 +1653,6 @@ function getNavPath(key, fallback) {
 onMounted(() => {
   loadCarouselData()
   loadNavModules()
-  loadHomepageNotices()
   loadHotCourses()
   loadHotBooks()
   loadHotExams()
@@ -2463,49 +2374,77 @@ const basicPlans = [
   },
 ]
 
+const memberModePlans = [
+  {
+    id: 'vip-month',
+    memberType: 'VIP用户',
+    period: '月付',
+    name: 'VIP月卡',
+    description: '适合按阶段学习，支持多月续费，权益按月叠加',
+    benefits: [
+      { title: '专属内容访问', description: '解锁 VIP 课程、电子书与考试题库中的会员内容' },
+      { title: '学习工具额度', description: '获得会员可用的工具使用次数与学习辅助能力' },
+      { title: '会员身份标识', description: '个人中心展示 VIP 身份，到期前可继续续费叠加' },
+    ],
+    price: '¥148.00',
+    priceSuffix: '起',
+    originalPrice: '¥176.00',
+    unitPrice: '¥88.80/月，2个月起购',
+    buttonText: '立即开通',
+    featured: false,
+    tone: 'vip',
+  },
+  {
+    id: 'vip-year',
+    memberType: 'VIP用户',
+    period: '年付',
+    name: 'VIP年卡',
+    description: '适合长期学习，年付比月付更划算',
+    benefits: [
+      { title: '全年 VIP 内容访问', description: '12 个月持续解锁 VIP 课程、电子书与考试题库' },
+      { title: '年付价格保护', description: '按年付费锁定低价，适合长期学习路线' },
+      { title: '优先功能体验', description: '优先体验新学习工具、新题库和会员专属活动' },
+    ],
+    price: '¥288.00',
+    priceSuffix: '',
+    originalPrice: '¥1056.00',
+    unitPrice: '¥288.00/年',
+    buttonText: '立即开通',
+    badge: '推荐',
+    featured: true,
+    tone: 'vip',
+  },
+  {
+    id: 'small-class-year',
+    memberType: '小班用户',
+    period: '年付',
+    name: '小班用户年卡',
+    description: '小班用户仅支持年付，享受更深度的陪伴式学习权益',
+    benefits: [
+      { title: '小班专属内容', description: '解锁小班课程、资料包与高阶学习路径' },
+      { title: '深度学习陪伴', description: '享受更高优先级的答疑、反馈和学习支持' },
+      { title: '年度成长计划', description: '适合一年制系统学习，权益按年续期' },
+    ],
+    price: '¥1888.00',
+    priceSuffix: '',
+    originalPrice: '¥2888.00',
+    unitPrice: '¥1888.00/年',
+    buttonText: '立即申请',
+    featured: false,
+    tone: 'small-class',
+  },
+]
+
 const adExpanded = ref(false)
 
-// ===== 首页公告栏（对接后端接口 + WebSocket 实时刷新） =====
-const noticesFromApi = ref([])   // 公告栏 channel=1
-const dynamicsFromApi = ref([])  // 动态栏 channel=2
-
-async function loadHomepageNotices() {
-  try {
-    const [noticeRes, dynamicRes] = await Promise.all([
-      $fetch('/homepage/announcement/notice?limit=10', {
-        baseURL: fetchConfig.baseURL,
-        headers: { appid: fetchConfig.headers.appid },
-      }),
-      $fetch('/homepage/announcement/dynamic?limit=10', {
-        baseURL: fetchConfig.baseURL,
-        headers: { appid: fetchConfig.headers.appid },
-      }),
-    ])
-    if (noticeRes && noticeRes.data && noticeRes.data.length > 0) {
-      noticesFromApi.value = noticeRes.data.map(item => ({
-        text: (item.icon ? item.icon + ' ' : '') + (item.title || ''),
-        color: item.color || '#6366f1',
-      }))
-    }
-    if (dynamicRes && dynamicRes.data && dynamicRes.data.length > 0) {
-      dynamicsFromApi.value = dynamicRes.data.map(item => ({
-        text: (item.icon ? item.icon + ' ' : '') + (item.title || ''),
-        color: item.color || '#10b981',
-      }))
-    }
-  } catch (e) {
-    console.warn('[首页公告] 接口请求失败，使用默认数据', e)
-  }
+// ===== 首页公告栏参数，对接 osh-backend 的 OshHomePageAnnouncementController =====
+const homepageAnnouncementBoardProps = {
+  moduleName: '首页模块',
+  noticeApiPath: '/homepage/announcement/notice',
+  dynamicApiPath: '/homepage/announcement/dynamic',
+  requestMethod: 'GET',
+  enableWsRefresh: true,
 }
-
-// WebSocket 实时推送：后端广播 HOMEPAGE_ANNOUNCEMENT_REFRESH 时重新拉取
-const { homepageAnnouncementRefreshFlag } = useWebSocket()
-watch(homepageAnnouncementRefreshFlag, (val) => {
-  if (process.client && val) {
-    console.log('[首页公告] WS 推送刷新，重新拉取公告数据')
-    loadHomepageNotices()
-  }
-})
 
 // 公告栏数据
 const noticePaused = ref(false)
@@ -2528,38 +2467,6 @@ const notices2 = [
   { text: '📝 在线考试新增错题本功能，智能复习更高效', color: '#10b981' },
   { text: '🚀 React 18 + Next.js 企业级项目实战课程已上线', color: '#8b5cf6' },
   { text: '💰 邀请好友注册，双方各得 20 元优惠券', color: '#ec4899' },
-]
-
-const vipPeriod = ref('year')
-const vipPeriods = [
-  { key: 'year', label: '年度', price: 188, unit: '年', save: null },
-]
-const vipCurrentPrice = computed(() => vipPeriods.find(p => p.key === vipPeriod.value)?.price)
-const vipCurrentLabel = computed(() => vipPeriods.find(p => p.key === vipPeriod.value)?.unit)
-const vipFeatures = ['全站免费 + 付费课程', 'VIP 专属直播课', '专属题库全解锁', '优先答疑通道', '学习进度云同步','内部网站浏览']
-
-// 小班专属亮点
-const classHighlights = [
-  { icon: '👥', title: '试用期包过-就业全流程陪伴', desc: '针对每个人技术路径规划,提供面试指导-入职-试用期技术支持' },
-  { icon: '💬', title: '小班专属技术培训', desc: '每周定期培训，模拟答复' },
-  { icon: '📋', title: '公司级商用项目实战', desc: '支持商用级项目实战带教，中-高级开发技术路线实践' },
-]
-const classFeatures = ['含全部付费课程权限', '网站全功能权限', '专人带教 + 小班技术培训', '简历指导+模拟面试+入职服务', '试用期陪伴', '终身回看']
-
-// 小班展开内容
-const classExpanded = ref(false)
-const classStudents = [
-  '应届毕业生 → 3个月拿到offer，入职中大型互联网公司',
-  '转行学员 → 从零基础到独立完成企业级项目开发',
-  '1-3年经验 → 技术瓶颈突破，薪资涨幅30%-50%',
-  '在职提升 → 边工作边学习，系统补齐技术短板',
-]
-const classTechPath = [
-  { title: '基础夯实', desc: '前端/后端核心技术体系梳理，查漏补缺' },
-  { title: '项目实战', desc: '参与公司级商用项目，积累真实开发经验' },
-  { title: '代码Review', desc: '一对一代码审查，培养工程化编码习惯' },
-  { title: '模拟面试', desc: '真实面试场景模拟，针对性查缺补漏' },
-  { title: '入职护航', desc: '入职后试用期全程技术支持，确保顺利转正' },
 ]
 
 // Feature icons
@@ -3865,204 +3772,138 @@ const features = [
   border-bottom: 2px solid #ede9fe;
 }
 
-/* 横向套餐布局 */
-.pricing-horizontal {
+.member-plan-row {
+  margin-top: 28px;
+}
+
+.member-plan-card {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid #dbe4ff;
+  border-radius: 18px;
+  padding: 26px 24px 22px;
+  box-shadow: 0 10px 30px rgba(99, 102, 241, 0.08);
+}
+
+.member-plan-card-featured {
+  border-color: #f6c880;
+  box-shadow: 0 12px 36px rgba(245, 158, 11, 0.16);
+}
+
+.member-plan-card-class {
+  border-color: #c7d2fe;
+  box-shadow: 0 10px 30px rgba(99, 102, 241, 0.12);
+}
+
+.member-plan-topline {
   display: flex;
-  flex-direction: column;
-  gap: 20px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #2563eb;
 }
-.pricing-h-card {
-  position: relative;
+
+.member-plan-period {
+  color: #315efb;
+}
+
+.member-plan-title-row {
   display: flex;
-  align-items: stretch;
-  background: white;
-  border-radius: 16px;
-  border: 1px solid #e9d5ff;
-  padding: 24px 28px;
-  gap: 28px;
-  min-height: 200px;
-  transition: all 0.3s ease;
-}
-.pricing-h-class {
-  flex-direction: column;
-  background: linear-gradient(135deg, #faf5ff 0%, #f5f3ff 100%);
-  border: 2px solid #c4b5fd;
-}
-.ph-top-row {
-  display: flex;
-  align-items: stretch;
-  gap: 28px;
-  width: 100%;
-}
-.pricing-h-vip {
-  background: linear-gradient(135deg, #EAEAEA, #D4D4D4, #bfdbfe, #93c5fd);
-  border-color: #93c5fd;
-}
-.pricing-h-vip .ph-title,
-.pricing-h-vip .ph-sub,
-.pricing-h-vip .ph-price-unit {
-  color: #1e293b;
-}
-.pricing-h-vip .ph-price-num {
-  color: #1e40af;
-}
-.pricing-h-vip .ph-feat-list {
-  color: #1e293b;
-}
-.pricing-h-vip .ph-check {
-  background: rgba(30, 64, 175, 0.12);
-  color: #1e40af;
-}
-@keyframes vip-ocean {
-  0% { background-position: 0% 50%; }
-  25% { background-position: 50% 100%; }
-  50% { background-position: 100% 50%; }
-  75% { background-position: 50% 0%; }
-  100% { background-position: 0% 50%; }
-}
-.ph-vip-intro {
-  display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 10px;
+  margin-bottom: 14px;
 }
-.ph-vip-slogan {
-  font-size: 15px;
-  font-weight: 700;
-  color: #1e40af;
+
+.member-plan-title {
   margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  color: #0f172a;
 }
-.ph-vip-desc {
-  font-size: 13px;
-  color: #334155;
-  line-height: 1.6;
-  margin: 0;
-}
-.ph-vip-tip {
+
+.member-plan-badge {
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid #fdba74;
+  background: #fff7ed;
+  color: #f59e0b;
   font-size: 12px;
-  color: #475569;
-  margin: 0;
+  font-weight: 700;
+  line-height: 1;
 }
-.ph-left {
-  min-width: 200px;
+
+.member-plan-desc {
+  margin: 0 0 18px;
+  font-size: 13px;
+  line-height: 1.8;
+  color: #64748b;
+  min-height: 54px;
+}
+
+.member-plan-benefits {
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  gap: 12px;
+  margin-bottom: 22px;
 }
-.ph-badge {
-  display: inline-block;
-  background: linear-gradient(135deg, #f59e0b, #f97316);
-  color: white;
-  font-size: 11px;
-  font-weight: 700;
-  padding: 3px 10px;
-  border-radius: 4px;
-  margin-bottom: 8px;
-  width: fit-content;
+
+.member-plan-benefit {
+  padding-left: 14px;
+  border-left: 4px solid #22c55e;
 }
-.ph-icon-vip {
-  font-size: 32px;
-  margin-bottom: 8px;
+
+.member-plan-benefit strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 14px;
+  color: #0f172a;
 }
-.ph-title {
-  font-size: 20px;
-  font-weight: 700;
-  color: #1e1b4b;
-  margin: 0 0 4px;
-}
-.ph-sub {
+
+.member-plan-benefit span {
+  display: block;
   font-size: 13px;
-  color: #6b7280;
-  margin: 0 0 12px;
+  line-height: 1.7;
+  color: #64748b;
 }
-.ph-price {
+
+.member-plan-price-row {
   display: flex;
   align-items: baseline;
-  gap: 4px;
+  gap: 12px;
+  margin-top: auto;
+  margin-bottom: 8px;
 }
-.ph-price-num {
+
+.member-plan-price-main {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.member-plan-price-main strong {
   font-size: 28px;
-  font-weight: 800;
-  color: #7c3aed;
+  line-height: 1;
+  font-weight: 900;
+  color: #dc2626;
 }
-.ph-price-unit {
-  font-size: 13px;
-  color: #6b7280;
+
+.member-plan-price-main span {
+  font-size: 14px;
+  color: #475569;
 }
-.ph-middle {
-  flex: 1;
-  display: flex;
-  align-items: stretch;
-  border-left: 1px solid #e9d5ff;
-  border-right: 1px solid #e9d5ff;
-  padding: 0 28px;
+
+.member-plan-price-row del {
+  font-size: 14px;
+  color: #94a3b8;
 }
-.ph-middle-vip {
-  border: none;
-  padding: 0 24px;
-}
-.ph-highlights {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  width: 100%;
-  justify-content: space-between;
-  flex: 1;
-  padding: 12px 0;
-}
-.ph-hl {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-}
-.ph-hl-icon {
-  font-size: 16px;
-  flex-shrink: 0;
-}
-.ph-hl-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #1f2937;
-}
-.ph-hl-desc {
-  font-size: 11px;
-  color: #6b7280;
-  line-height: 1.4;
-}
-.ph-right {
-  min-width: 180px;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  padding-left: 0;
-  margin-left: -12px;
-}
-.ph-feat-list {
-  list-style: none;
-  padding: 0;
-  margin: 0 0 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+
+.member-plan-unit-price {
+  display: block;
+  margin-bottom: 18px;
   font-size: 12px;
-  color: #374151;
-}
-.ph-feat-list li {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.ph-check {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: #d1fae5;
-  color: #059669;
-  font-size: 10px;
-  font-weight: 700;
-  flex-shrink: 0;
+  color: #64748b;
 }
 .ph-btn {
   padding: 10px 20px;
