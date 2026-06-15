@@ -1,64 +1,87 @@
 <template>
   <div class="filter-bar">
-    <div class="filter-left">
-      <!-- 标签筛选 -->
-      <n-select
-        v-model:value="modelValue.tags"
-        multiple
-        filterable
-        placeholder="选择标签筛选"
-        :options="displayTagOptions"
-        :loading="tagLoading"
-        :filter="filterTagOption"
-        style="width: 200px"
-        clearable
-        :max-tag-count="1"
-      />
-
-      <!-- 排序 -->
-      <n-select
-        v-model:value="modelValue.sortType"
-        :options="sortOptions"
-        style="width: 160px"
-        @update:value="handleSearch"
-      />
-
-      <!-- 我收藏的 -->
-      <button
-        class="follow-btn"
-        :class="{ active: modelValue.isFollowing }"
-        @click="toggleFollowing"
-      >
-        <span class="heart-icon">{{ modelValue.isFollowing ? '♥' : '♡' }}</span>
-        我收藏的
-      </button>
-      <!-- 搜索关键字 - 更明显 -->
-      <div class="search-wrap">
-        <span class="search-icon">🔍</span>
-        <input
-          v-model="modelValue.keyword"
-          class="search-input"
-          placeholder="搜索课程关键字..."
-          @keyup.enter="handleSearch"
-        />
-        <span v-if="modelValue.keyword" class="search-clear" @click="modelValue.keyword = ''; handleSearch()">✕</span>
-      </div>
-
-      <!-- 课程编号 -->
-      <div class="search-wrap no-num">
-        <span class="search-icon">🔢</span>
-        <input
-          v-model="modelValue.courseNo"
-          class="search-input"
-          placeholder="课程编号..."
-          @keyup.enter="handleSearch"
+    <div class="filter-grid">
+      <div class="filter-cell">
+        <n-select
+          v-model:value="modelValue.tags"
+          multiple
+          filterable
+          size="small"
+          placeholder="标签"
+          :options="displayTagOptions"
+          :loading="tagLoading"
+          :filter="filterTagOption"
+          class="filter-control"
+          clearable
+          :max-tag-count="1"
         />
       </div>
 
-      <!-- 查询按钮 -->
-      <button class="btn-query" @click="handleSearch">
-        🔍 查询
-      </button>
+      <div class="filter-cell">
+        <n-select
+          v-model:value="modelValue.sortType"
+          :options="sortOptions"
+          size="small"
+          class="filter-control"
+          @update:value="handleSearch"
+        />
+      </div>
+
+      <div class="filter-cell">
+        <n-select
+          v-model:value="modelValue.difficulty"
+          :options="difficultyFilterOptions"
+          placeholder="难度"
+          clearable
+          size="small"
+          class="filter-control"
+          @update:value="handleSearch"
+        />
+      </div>
+
+      <div class="filter-cell">
+        <button
+          class="filter-btn follow-btn"
+          :class="{ active: modelValue.isFollowing }"
+          @click="toggleFollowing"
+        >
+          <span class="heart-icon">{{ modelValue.isFollowing ? '♥' : '♡' }}</span>
+          收藏
+        </button>
+      </div>
+
+      <div class="filter-cell">
+        <div class="search-wrap">
+          <span class="search-icon">🔍</span>
+          <input
+            v-model="modelValue.keyword"
+            class="search-input"
+            placeholder="关键字"
+            @keyup.enter="handleSearch"
+          />
+          <span
+            v-if="modelValue.keyword"
+            class="search-clear"
+            @click="modelValue.keyword = ''; handleSearch()"
+          >✕</span>
+        </div>
+      </div>
+
+      <div class="filter-cell">
+        <div class="search-wrap">
+          <span class="search-icon">#</span>
+          <input
+            v-model="modelValue.courseNo"
+            class="search-input"
+            placeholder="编号"
+            @keyup.enter="handleSearch"
+          />
+        </div>
+      </div>
+
+      <div class="filter-cell">
+        <button class="filter-btn btn-query" @click="handleSearch">查询</button>
+      </div>
     </div>
   </div>
 </template>
@@ -68,6 +91,7 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { NSelect } from 'naive-ui';
 import { fetchConfig } from '~/composables/useHttp';
 import { getAuthHeaders } from '~/composables/Api/Course/course';
+import { COURSE_DIFFICULTY_OPTIONS } from '~/composables/courseDifficulty';
 
 const props = defineProps({
   modelValue: { type: Object, default: () => ({}) },
@@ -128,6 +152,11 @@ onMounted(() => {
   }
 });
 
+const difficultyFilterOptions = COURSE_DIFFICULTY_OPTIONS.map((item) => ({
+  label: `${item.icon} ${item.label}`,
+  value: item.value,
+}));
+
 const sortOptions = [
   { label: '全部', value: 'all' },
   { label: '免费', value: 'FREE' },
@@ -144,12 +173,10 @@ const toggleFollowing = () => {
 
 const handleSearch = () => {
   props.modelValue.isFree = props.modelValue.sortType === 'FREE' ? true : null;
-  // 全部时清空类型筛选
   if (props.modelValue.sortType === 'all') {
     props.modelValue.isFree = null;
     props.modelValue.courseType = null;
   }
-  // 将 sortType 映射为后端 resourceType（all 时传 null）
   props.modelValue.resourceType = props.modelValue.sortType === 'all' ? null : props.modelValue.sortType;
   props.modelValue.collectionFlag = props.modelValue.isFollowing ? 1 : null;
   emit('update:modelValue', props.modelValue);
@@ -159,41 +186,58 @@ const handleSearch = () => {
 
 <style scoped>
 .filter-bar {
-  display: flex;
-  align-items: center;
   background: #fff;
-  padding: 14px 18px;
+  padding: 12px 16px;
   border-radius: 8px;
   border: 1px solid #e8e8e8;
   margin-bottom: 10px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
-  gap: 12px;
-  flex-wrap: wrap;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
   width: 100%;
   box-sizing: border-box;
 }
-.filter-left {
-  display: flex;
-  align-items: center;
+
+/* 7 列等宽，与下方 5 列卡片同容器 100% 宽对齐 */
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 10px;
-  flex-wrap: wrap;
-  flex: 1;
+  width: 100%;
+  align-items: center;
 }
 
-/* 我收藏的按钮 */
-.follow-btn {
+.filter-cell {
+  min-width: 0;
+}
+
+.filter-control {
+  width: 100%;
+}
+
+.filter-control :deep(.n-base-selection) {
+  width: 100%;
+  min-height: 32px;
+}
+
+.filter-btn {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 6px 14px;
-  border: 1px solid #d9d9d9;
+  justify-content: center;
+  width: 100%;
+  height: 32px;
+  padding: 0 8px;
   border-radius: 6px;
-  background: #fff;
   font-size: 13px;
-  color: #555;
   cursor: pointer;
-  transition: all 0.2s;
   white-space: nowrap;
+  transition: all 0.2s;
+  box-sizing: border-box;
+}
+
+.follow-btn {
+  gap: 4px;
+  border: 1px solid #d9d9d9;
+  background: #fff;
+  color: #555;
 }
 .follow-btn:hover { border-color: #18a058; color: #18a058; }
 .follow-btn.active {
@@ -202,65 +246,67 @@ const handleSearch = () => {
   color: #18a058;
   font-weight: 500;
 }
-.heart-icon { font-size: 14px; }
+.heart-icon { font-size: 13px; line-height: 1; }
 
-/* 搜索框 - 更明显 */
 .search-wrap {
   display: flex;
   align-items: center;
-  background: #f5f7fa;
-  border: 1.5px solid #d0d7e3;
-  border-radius: 6px;
+  width: 100%;
+  height: 32px;
   padding: 0 10px;
-  height: 34px;
   gap: 6px;
+  background: #f5f7fa;
+  border: 1px solid #d0d7e3;
+  border-radius: 6px;
+  box-sizing: border-box;
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 .search-wrap:focus-within {
   border-color: #18a058;
-  box-shadow: 0 0 0 2px rgba(24,160,88,0.12);
+  box-shadow: 0 0 0 2px rgba(24, 160, 88, 0.12);
   background: #fff;
 }
-.search-icon { font-size: 13px; color: #999; flex-shrink: 0; }
+.search-icon {
+  font-size: 12px;
+  color: #999;
+  flex-shrink: 0;
+  line-height: 1;
+}
 .search-input {
+  flex: 1;
+  min-width: 0;
   border: none;
   outline: none;
   background: transparent;
   font-size: 13px;
   color: #333;
-  width: 160px;
 }
 .search-input::placeholder { color: #aaa; }
-.search-clear { font-size: 12px; color: #bbb; cursor: pointer; }
+.search-clear {
+  font-size: 11px;
+  color: #bbb;
+  cursor: pointer;
+  flex-shrink: 0;
+}
 .search-clear:hover { color: #666; }
-.no-num .search-input { width: 110px; }
 
-/* 查询按钮 */
 .btn-query {
+  border: none;
   background: #18a058;
   color: #fff;
-  border: none;
-  border-radius: 6px;
-  padding: 7px 18px;
-  font-size: 13px;
-  cursor: pointer;
   font-weight: 500;
-  white-space: nowrap;
-  transition: background 0.2s;
 }
 .btn-query:hover { background: #0e7a3e; }
 
-/* 新增课程 */
-.btn-create {
-  background: #fff;
-  color: #18a058;
-  border: 1px solid #18a058;
-  border-radius: 6px;
-  padding: 7px 16px;
-  font-size: 13px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all 0.2s;
+@media (max-width: 1100px) {
+  .filter-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
-.btn-create:hover { background: #f0fdf4; }
+
+@media (max-width: 720px) {
+  .filter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
 </style>

@@ -138,6 +138,7 @@ const queryParams = reactive({
   collectionFlag: null, // 「我收藏的」筛选
   sortType: 'all',
   resourceType: null,  // 课程资源类型筛选（FREE/VIP/CASH_ONLY 等）
+  difficulty: null,    // 课程难度：1/2/3，null 表示不限
   courseNo: '',
   onlyHidden: false,   // 创始人「已隐藏课程」分类，仅显示 status=7
 });
@@ -201,6 +202,7 @@ async function fetchCourseListDirect() {
       collectionFlag: queryParams.collectionFlag,
       sortType: queryParams.sortType,
       resourceType: queryParams.resourceType,
+      difficulty: queryParams.difficulty,
       courseNo: queryParams.courseNo,
       onlyHidden: queryParams.onlyHidden,
     },
