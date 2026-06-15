@@ -1,5 +1,11 @@
 <template>
   <div class="user-manage-page">
+    <nav class="admin-subnav" aria-label="后台管理导航">
+      <nuxt-link to="/admin/users" class="admin-subnav-item active">用户管理</nuxt-link>
+      <nuxt-link to="/admin/behavior" class="admin-subnav-item">行为数据</nuxt-link>
+      <nuxt-link to="/admin/contribution" class="admin-subnav-item">贡献统计</nuxt-link>
+    </nav>
+
     <h2 class="page-title">
       用户管理
       <n-button type="primary" size="small" class="invite-btn" @click="showInviteModal = true">
@@ -85,28 +91,67 @@
     </div>
 
     <!-- 邀请用户弹窗 -->
-    <n-modal v-model:show="showInviteModal" preset="card" title="邀请用户注册" style="width: 460px;">
+    <n-modal v-model:show="showInviteModal" preset="card" title="邀请用户注册" style="width: min(1080px, calc(100vw - 32px));">
       <n-form size="small" ref="inviteFormRef" :model="inviteForm" :rules="inviteRules">
-        <n-form-item label="邮箱" path="email">
-          <n-input v-model:value="inviteForm.email" placeholder="被邀请人邮箱" />
-        </n-form-item>
-        <n-form-item label="角色" path="roleId">
-          <n-select v-model:value="inviteForm.roleId" :options="inviteRoleOptions" placeholder="选择角色" @update:value="onInviteRoleChange" />
-        </n-form-item>
-        <n-form-item v-if="inviteNeedExpire" label="角色有效期">
-          <div style="display:flex;align-items:center;gap:8px;width:100%;">
-            <n-date-picker v-if="!inviteForm.permanent" v-model:value="inviteExpireTimestamp" type="datetime" size="small" placeholder="选择到期时间" clearable style="flex:1;" />
-            <n-checkbox v-model:checked="inviteForm.permanent" size="small">永久</n-checkbox>
+        <n-form-item label="邀请用户">
+          <div class="invite-row-list">
+            <div v-for="(row, index) in inviteRows" :key="row.id" class="invite-email-row">
+              <n-input
+                v-model:value="row.email"
+                placeholder="填写用户邮箱"
+                clearable
+                :status="row.email && !isValidEmail(row.email) ? 'error' : undefined"
+              />
+              <n-select
+                v-model:value="row.roleId"
+                :options="inviteRoleOptions"
+                placeholder="选择角色"
+                @update:value="onInviteRowRoleChange(row)"
+              />
+              <n-input-number
+                v-model:value="row.points"
+                :min="0"
+                :max="99999"
+                placeholder="初始积分"
+              />
+              <div v-if="inviteRowNeedExpire(row)" class="invite-expire-cell">
+                <n-date-picker
+                  v-if="!row.permanent"
+                  v-model:value="row.expireTimestamp"
+                  type="datetime"
+                  size="small"
+                  placeholder="到期时间"
+                  clearable
+                />
+                <n-checkbox v-model:checked="row.permanent" size="small">永久</n-checkbox>
+              </div>
+              <div v-else class="invite-expire-placeholder">-</div>
+              <button
+                type="button"
+                class="invite-row-delete"
+                :disabled="inviteRows.length === 1"
+                @click="removeInviteRow(index)"
+              >
+                删除
+              </button>
+            </div>
+            <button type="button" class="invite-row-add" @click="addInviteRow">
+              添加用户
+            </button>
           </div>
         </n-form-item>
-        <n-form-item label="初始积分">
-          <n-input-number v-model:value="inviteForm.points" :min="0" :max="99999" placeholder="默认188" style="width: 100%;" />
-        </n-form-item>
       </n-form>
-      <div v-if="inviteResult" class="invite-result">
-        <p>邀请链接已生成（{{ inviteResult.expireDays }}天有效）：</p>
-        <code class="invite-link">{{ inviteResult.inviteLink }}</code>
-        <n-button size="tiny" type="primary" @click="copyInviteLink">复制链接</n-button>
+      <div v-if="inviteResults.length" class="invite-result">
+        <p>邀请完成：成功 {{ inviteSuccessCount }} 个，失败 {{ inviteFailCount }} 个</p>
+        <div v-for="result in inviteResults" :key="result.email" class="invite-result-row" :class="{ failed: !result.success }">
+          <strong>{{ result.email }}</strong>
+          <template v-if="result.success">
+            <span>邀请链接已生成（{{ result.expireDays }}天有效）</span>
+            <code class="invite-link">{{ result.inviteLink }}</code>
+          </template>
+          <span v-else>{{ result.message || '邀请失败' }}</span>
+        </div>
+        <n-button v-if="inviteSuccessCount" size="tiny" type="primary" @click="copyInviteLink">复制全部成功链接</n-button>
       </div>
       <template #footer>
         <n-button type="primary" size="small" @click="submitInvite" :loading="inviteLoading" :disabled="!canSubmitInvite">
@@ -236,10 +281,10 @@ function goToDetail(userId) {
 // ── 邀请管理员 ──
 const showInviteModal = ref(false)
 const inviteLoading = ref(false)
-const inviteResult = ref(null)
+const inviteResults = ref([])
 const inviteFormRef = ref(null)
-const inviteForm = reactive({ email: '', roleId: null, points: 188, permanent: false })
-const inviteExpireTimestamp = ref(null)
+const inviteRows = ref([createInviteRow()])
+const inviteForm = reactive({})
 const inviteRoleOptions = [
   { label: '普通开发者', value: 2 },
   { label: 'VIP用户', value: 3 },
@@ -249,30 +294,75 @@ const inviteRoleOptions = [
 ]
 
 // VIP(roleId=3) 和 小班(roleId=4) 需要指定有效期
-const inviteNeedExpire = computed(() => inviteForm.roleId === 3 || inviteForm.roleId === 4)
+const inviteItems = computed(() => buildInviteItems())
+const inviteEmailList = computed(() => inviteItems.value.map(item => item.email))
+const inviteSuccessCount = computed(() => inviteResults.value.filter(item => item.success).length)
+const inviteFailCount = computed(() => inviteResults.value.filter(item => !item.success).length)
 
 const canSubmitInvite = computed(() => {
-  if (!inviteForm.email || !inviteForm.roleId) return false
-  if (inviteNeedExpire.value && !inviteForm.permanent && !inviteExpireTimestamp.value) return false
-  return true
+  return inviteItems.value.length > 0 && inviteRows.value.every(isInviteRowValid)
 })
 
-function onInviteRoleChange() {
-  inviteExpireTimestamp.value = null
-  inviteForm.permanent = false
+const inviteRules = {}
+
+function createInviteRow() {
+  return {
+    id: Date.now() + Math.random(),
+    email: '',
+    roleId: null,
+    points: 188,
+    permanent: false,
+    expireTimestamp: null
+  }
 }
-const inviteRules = {
-  email: [
-    { required: true, message: '请输入邮箱' },
-    {
-      validator: (_rule, value) => /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(value),
-      message: '请输入有效邮箱格式',
-      trigger: ['input', 'blur']
+
+function addInviteRow() {
+  inviteRows.value.push(createInviteRow())
+}
+
+function removeInviteRow(index) {
+  if (inviteRows.value.length === 1) return
+  inviteRows.value.splice(index, 1)
+}
+
+function onInviteRowRoleChange(row) {
+  row.permanent = false
+  row.expireTimestamp = null
+}
+
+function inviteRowNeedExpire(row) {
+  return row.roleId === 3 || row.roleId === 4
+}
+
+function isInviteRowValid(row) {
+  const email = String(row.email || '').trim()
+  if (!email || !isValidEmail(email) || !row.roleId) return false
+  if (inviteRowNeedExpire(row) && !row.permanent && !row.expireTimestamp) return false
+  return true
+}
+
+function buildInviteItems() {
+  const seen = new Set()
+  const items = []
+  for (const row of inviteRows.value) {
+    const email = String(row.email || '').trim()
+    if (!email || seen.has(email)) continue
+    seen.add(email)
+    const item = {
+      email,
+      roleId: row.roleId,
+      points: row.points ?? 188
     }
-  ],
-  roleId: [
-    { required: true, message: '请选择角色', type: 'number' }
-  ]
+    if (inviteRowNeedExpire(row)) {
+      if (row.permanent) {
+        item.permanent = true
+      } else if (row.expireTimestamp) {
+        item.expireTime = formatDateTime(row.expireTimestamp)
+      }
+    }
+    items.push(item)
+  }
+  return items
 }
 
 async function submitInvite() {
@@ -283,29 +373,26 @@ async function submitInvite() {
     return
   }
   inviteLoading.value = true
-  inviteResult.value = null
+  inviteResults.value = []
   try {
-    // 构建请求体
-    const body = { email: inviteForm.email, roleId: inviteForm.roleId, points: inviteForm.points }
-    if (inviteNeedExpire.value) {
-      if (inviteForm.permanent) {
-        body.permanent = true
-      } else if (inviteExpireTimestamp.value) {
-        const d = new Date(inviteExpireTimestamp.value)
-        body.expireTime = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0') + ' ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0') + ':' + String(d.getSeconds()).padStart(2,'0')
-      }
+    const items = inviteItems.value
+    if (!items.length) {
+      alert('请至少填写一个邮箱')
+      return
     }
-    const res = await $fetch(`${fetchConfig.baseURL}/admin/invite/create`, {
+    if (!inviteRows.value.every(isInviteRowValid)) {
+      alert('请检查每个用户的邮箱、角色、积分和有效期')
+      return
+    }
+
+    const res = await $fetch(`${fetchConfig.baseURL}/admin/invite/batch`, {
       method: 'POST',
       headers: getAuthHeadersLocal(),
-      body
+      body: { items }
     })
-    if (res?.code === 200 && res?.data) {
-      inviteResult.value = res.data
-      alert('邀请已发送到对方邮箱')
-    } else {
-      alert(res?.msg || '邀请失败')
-    }
+    const results = normalizeBatchInviteResults(res, inviteEmailList.value)
+    inviteResults.value = results
+    alert(`邀请完成：成功 ${results.filter(item => item.success).length} 个，失败 ${results.filter(item => !item.success).length} 个`)
   } catch (e) {
     alert(e?.data?.msg || '邀请失败')
   } finally {
@@ -314,9 +401,45 @@ async function submitInvite() {
 }
 
 function copyInviteLink() {
-  if (!inviteResult.value?.inviteLink) return
-  navigator.clipboard.writeText(inviteResult.value.inviteLink)
+  const text = inviteResults.value
+    .filter(item => item.success && item.inviteLink)
+    .map(item => `${item.email}: ${item.inviteLink}`)
+    .join('\n')
+  if (!text) return
+  navigator.clipboard.writeText(text)
   alert('链接已复制')
+}
+
+function normalizeBatchInviteResults(res, emails) {
+  const items = res?.data?.items || []
+  if (!items.length) {
+    return emails.map(email => ({
+      email,
+      success: false,
+      message: res?.msg || '邀请失败'
+    }))
+  }
+  return items.map(item => ({
+    email: item.email,
+    success: !!item.success,
+    message: item.message,
+    expireDays: item.data?.expireDays,
+    inviteLink: item.data?.inviteLink,
+  }))
+}
+
+function formatDateTime(timestamp) {
+  const d = new Date(timestamp)
+  return d.getFullYear() + '-' +
+    String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0') + ' ' +
+    String(d.getHours()).padStart(2, '0') + ':' +
+    String(d.getMinutes()).padStart(2, '0') + ':' +
+    String(d.getSeconds()).padStart(2, '0')
+}
+
+function isValidEmail(value) {
+  return /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(value)
 }
 
 function getAuthHeadersLocal() {
@@ -344,6 +467,43 @@ useHead({ title: '用户管理' })
   padding: 24px;
 }
 
+.admin-subnav {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 18px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.admin-subnav-item {
+  min-width: 88px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 14px;
+  border-radius: 6px;
+  color: #475569;
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+}
+
+.admin-subnav-item:hover {
+  color: #2563eb;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.admin-subnav-item.active {
+  color: #1d4ed8;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
 .page-title {
   font-size: 1.25rem;
   font-weight: 600;
@@ -358,6 +518,77 @@ useHead({ title: '用户管理' })
   font-size: 12px;
 }
 
+.invite-row-list {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.invite-email-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.5fr) minmax(130px, 0.8fr) 120px minmax(180px, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.invite-expire-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.invite-expire-cell :deep(.n-date-picker) {
+  min-width: 0;
+  flex: 1;
+}
+
+.invite-expire-placeholder {
+  color: #94a3b8;
+  text-align: center;
+}
+
+.invite-row-delete {
+  border: 0;
+  background: transparent;
+  color: #ef4444;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.invite-row-delete:disabled {
+  color: #cbd5e1;
+  cursor: not-allowed;
+}
+
+.invite-row-add {
+  height: 30px;
+  border: 1px dashed #8b5cf6;
+  border-radius: 6px;
+  background: #fff;
+  color: #7c3aed;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.invite-row-add:hover {
+  background: #f5f3ff;
+}
+
+@media (max-width: 900px) {
+  .invite-email-row {
+    grid-template-columns: 1fr;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #f1f5f9;
+  }
+
+  .invite-row-delete {
+    justify-self: end;
+  }
+}
+
 .invite-result {
   margin-top: 12px;
   padding: 12px;
@@ -367,10 +598,27 @@ useHead({ title: '用户管理' })
   font-size: 13px;
 }
 
+.invite-result-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 10px;
+  padding: 10px;
+  background: #fff;
+  border: 1px solid #dcfce7;
+  border-radius: 6px;
+}
+
+.invite-result-row.failed {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
 .invite-link {
   display: block;
   word-break: break-all;
-  margin: 8px 0;
+  margin: 4px 0;
   padding: 8px;
   background: #fff;
   border: 1px solid #e2e8f0;

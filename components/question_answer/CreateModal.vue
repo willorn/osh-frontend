@@ -14,7 +14,7 @@
             <n-radio :value="0">
               <span>🔓 公开问题（所有人可见）</span>
             </n-radio>
-            <n-radio :value="1">
+            <n-radio v-if="!toolMode" :value="1">
               <span>🔒 付费专属（仅付费用户可见）</span>
             </n-radio>
           </n-space>
@@ -112,8 +112,8 @@
     v-model:show="showAuditTip"
     preset="dialog"
     type="success"
-    title="新增成功"
-    content="新增成功，请等待审核"
+    title="发布成功"
+    content="问题已成功发布"
     positive-text="知道了"
   />
 </template>
@@ -121,7 +121,7 @@
 <script setup>
 import { reactive, ref, computed, watch } from 'vue';
 import { createDiscreteApi } from 'naive-ui';
-import { apiCreateQuestion, apiGetQnaTags } from '~/composables/Api/QuestionAnswer/qna.js';
+import { apiCreateQuestion, apiCreateToolQuestion, apiGetQnaTags } from '~/composables/Api/QuestionAnswer/qna.js';
 import {
   NModal, NForm, NFormItem, NInput, NInputNumber, NSelect, NRadioGroup, NRadio,
   NSpace, NButton, NTag, NText,
@@ -143,6 +143,10 @@ const props = defineProps({
   title: {
     type: String,
     default: '我要提问',
+  },
+  toolMode: {
+    type: Boolean,
+    default: false,
   },
 })
 const emit = defineEmits(['update:show', 'success']);
@@ -264,6 +268,9 @@ function applyResourcePreset() {
   if (!props.presetResourceType && !props.presetResourceNo) return
   formValue.resourceType = props.presetResourceType || null
   formValue.resourceNo = props.presetResourceNo ? Number(props.presetResourceNo) : null
+  if (props.toolMode) {
+    formValue.isPaidOnly = 0
+  }
 }
 
 // 立即发布（改为：创建问题）
@@ -303,8 +310,13 @@ async function handlePublish() {
 
     console.log('创建问题请求数据:', requestData);
 
-    // 创建问题
-    const createRes = await apiCreateQuestion(requestData);
+    const createRes = props.toolMode
+      ? await apiCreateToolQuestion({
+        toolId: Number(formValue.resourceNo),
+        content: formValue.content.trim(),
+        tags: formValue.tags.length > 0 ? formValue.tags : undefined,
+      })
+      : await apiCreateQuestion(requestData);
     
     console.log('创建问题响应:', createRes);
     
