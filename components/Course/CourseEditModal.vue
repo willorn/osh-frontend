@@ -75,6 +75,28 @@
         />
       </n-form-item>
 
+      <n-form-item
+        label="课程难度"
+        feedback="表示内容学习难度，与资源类型、适用人群等级（level）无关"
+      >
+        <div class="difficulty-picker">
+          <button
+            v-for="item in COURSE_DIFFICULTY_OPTIONS"
+            :key="item.value"
+            type="button"
+            class="difficulty-option"
+            :class="{
+              active: selectedDifficulty === item.value,
+              [`difficulty-${item.tone}`]: true,
+            }"
+            @click="selectedDifficulty = item.value"
+          >
+            <span class="difficulty-option-icon">{{ item.icon }}</span>
+            <span class="difficulty-option-label">{{ item.label }}</span>
+          </button>
+        </div>
+      </n-form-item>
+
       <n-form-item label="课程价格">        <n-space>
           <n-input-number
             v-model:value="formValue.price"
@@ -164,6 +186,7 @@ import {
   apiSaveCourse,
   getAuthHeaders,
 } from '~/composables/Api/Course/course';
+import { COURSE_DIFFICULTY_OPTIONS, normalizeCourseDifficulty } from '~/composables/courseDifficulty';
 import { fetchConfig } from '~/composables/useHttp';
 import {
   NModal, NForm, NFormItem, NInput, NSelect, NSpace,
@@ -238,6 +261,7 @@ const formValue = reactive({
 
 // 资源类型单独用 ref，避免 reactive 对象属性在 n-select 中响应式失效
 const selectedResourceType = ref('FREE');
+const selectedDifficulty = ref(1);
 
 // 资源类型选项（与后端 CourseResourceEnum 保持一致）
 const resourceTypeOptions = [
@@ -273,6 +297,7 @@ watch(() => props.show, async (val) => {
       formValue.tPrice = props.initData.tPrice || 0;
       formValue.type = props.initData.type || 'media';
       selectedResourceType.value = normalizeResourceType(props.initData.resourceType);
+      selectedDifficulty.value = normalizeCourseDifficulty(props.initData.difficulty) || 1;
       // 回显资料列表
       materialList.value = Array.isArray(props.initData.materials) ? [...props.initData.materials] : [];
     } else {
@@ -289,6 +314,7 @@ watch(() => props.show, async (val) => {
       formValue.tPrice = 0;
       formValue.type = 'media';
       selectedResourceType.value = 'FREE';
+      selectedDifficulty.value = 1;
       materialList.value = [];
     }
   }
@@ -414,6 +440,10 @@ const handleDeleteMaterial = (index, mat) => {
 const handlePublish = async () => {
   // 新增时完整校验，编辑时只校验标题
   if (!formValue.title?.trim()) { message.error('请输入课程标题'); return; }
+  if (!normalizeCourseDifficulty(selectedDifficulty.value)) {
+    message.error('请选择课程难度');
+    return;
+  }
 
   if (!formValue.id) {
     // 新增模式：校验必填字段
@@ -465,6 +495,7 @@ const handlePublish = async () => {
       type: formValue.type,
       resourceType,
       freeType,
+      difficulty: selectedDifficulty.value,
       material: materialList.value[0] ? (() => {
         const mat = materialList.value[0];
         // 已有资料（有 id）：传 materialId 告知后端保留，不重建
@@ -551,4 +582,48 @@ const handlePublish = async () => {
   border-radius: 2px;
   transition: width 0.2s ease;
 }
+
+.difficulty-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.difficulty-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.15s ease;
+}
+.difficulty-option:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+.difficulty-option.active {
+  border-width: 2px;
+  padding: 7px 13px;
+  font-weight: 600;
+}
+.difficulty-option.difficulty-beginner.active {
+  border-color: #86efac;
+  background: #f0fdf4;
+  color: #166534;
+}
+.difficulty-option.difficulty-intermediate.active {
+  border-color: #fcd34d;
+  background: #fffbeb;
+  color: #b45309;
+}
+.difficulty-option.difficulty-advanced.active {
+  border-color: #c4b5fd;
+  background: #f5f3ff;
+  color: #6d28d9;
+}
+.difficulty-option-icon { font-size: 16px; line-height: 1; }
+.difficulty-option-label { line-height: 1.2; }
 </style>

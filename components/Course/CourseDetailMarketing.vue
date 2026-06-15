@@ -28,6 +28,16 @@
           <span class="meta-item price-text">
             {{ Number(data.price) > 0 ? '¥' + data.price : '免费' }}
           </span>
+          <template v-if="difficultyMeta">
+            <span class="meta-sep">·</span>
+            <span
+              class="difficulty-chip"
+              :class="`difficulty-${difficultyMeta.tone}`"
+            >
+              <span class="difficulty-icon">{{ difficultyMeta.icon }}</span>
+              {{ difficultyMeta.label }}
+            </span>
+          </template>
           <template v-if="canUpdate">
             <span class="meta-sep">·</span>
             <span class="meta-item status-chip" :class="`status-${courseStatusTone}`">
@@ -79,6 +89,7 @@ import { CreateOutline } from '@vicons/ionicons5';
 import CourseOutlineManager from '~/components/Course/edit/CourseOutlineManager.vue';
 import CourseEditModal from '~/components/Course/CourseEditModal.vue';
 import { apiGetMaterialUrl, apiGetCourseMaterials } from '~/composables/Api/Course/course';
+import { courseDifficultyMeta } from '~/composables/courseDifficulty';
 import { fetchConfig } from '~/composables/useHttp';
 
 const { permissionList } = usePermission();
@@ -128,6 +139,7 @@ const courseStatusTone = computed(() => {
   if (courseStatusCode.value === 7) return 'pending';
   return 'pending';
 });
+const difficultyMeta = computed(() => courseDifficultyMeta(props.data?.difficulty));
 
 // 本地课程数据副本，编辑后更新
 const localData = ref<any>({ ...props.data });
@@ -301,6 +313,7 @@ async function openEditBasic() {
     tPrice: props.data?.tPrice || props.data?.t_price || 0,
     type: props.data?.type || 'media',
     resourceType: props.data?.resourceType || 'FREE',
+    difficulty: props.data?.difficulty ?? 1,
     materials,
   };
   showEditBasic.value = true;
@@ -376,6 +389,19 @@ function onEditSuccess() {
 .status-pending { background: #fff7e6; color: #d48806; }
 .status-pass { background: #f6ffed; color: #389e0d; }
 .status-reject { background: #fff1f0; color: #cf1322; }
+.difficulty-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.difficulty-icon { font-size: 11px; line-height: 1; }
+.difficulty-beginner { color: #166534; background: #dcfce7; }
+.difficulty-intermediate { color: #b45309; background: #fef3c7; }
+.difficulty-advanced { color: #6d28d9; background: #ede9fe; }
 .btn-row { display: flex; align-items: center; margin-top: 8px; }
 
 /* 资料下载 */
