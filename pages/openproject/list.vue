@@ -84,21 +84,89 @@
                         <p class="detail-desc">{{ detailData.projectDesc || '暂无详细介绍' }}</p>
 
                         <div v-if="detailData.contributors?.length" class="contributors">
-                          <div class="detail-section-title">贡献者</div>
+                          <div class="detail-section-title">开发团队</div>
                           <div class="contributor-list">
                             <UserCard
                               v-for="contributor in detailData.contributors"
                               :key="contributor.id || contributor.githubAccount"
                               :github-account="contributor.profileUrl || contributor.githubAccount"
-                              :username="contributor.wechatName || contributor.githubAccount"
+                              :username="contributor.githubAccount"
                               class="contributor"
                             >
                               <n-avatar :size="22" :src="contributor.avatarUrl" />
-                              <span>{{ contributor.wechatName || contributor.githubAccount }}</span>
-                              <small class="github-account">{{ contributor.profileUrl || buildGithubProfileUrl(contributor.githubAccount) }}</small>
+                              <button
+                                type="button"
+                                class="github-copy-link"
+                                @click.stop="copyGithubLink(contributor.profileUrl || buildGithubProfileUrl(contributor.githubAccount))"
+                              >
+                                {{ contributor.profileUrl || buildGithubProfileUrl(contributor.githubAccount) }}
+                              </button>
                               <small>{{ contributor.contributions || 0 }} 次贡献</small>
-                              <small>{{ contributor.contributorType === 'primary' ? '主要' : '协同' }}</small>
+                              <small>{{ contributor.contributorType === 'primary' ? '最高负责人' : '协同开发' }}</small>
                             </UserCard>
+                          </div>
+                        </div>
+
+                        <div v-if="detailData.modules?.length" class="module-list">
+                          <div class="detail-section-title">项目模块</div>
+                          <div class="module-card" v-for="module in detailData.modules" :key="module.id || module.moduleName">
+                            <div class="module-head">
+                              <strong>{{ module.moduleName }}</strong>
+                              <span>{{ module.moduleDesc || '暂无描述' }}</span>
+                            </div>
+                            <div v-if="module.members?.length" class="module-members">
+                              <UserCard
+                                v-for="member in module.members"
+                                :key="`${module.id}-${member.githubAccount}-${member.memberRole}`"
+                                :github-account="buildGithubProfileUrl(member.githubAccount)"
+                                :username="member.githubAccount"
+                                class="module-member"
+                              >
+                                <n-avatar :size="22" :src="moduleMemberAvatar(member)" />
+                                <button
+                                  type="button"
+                                  class="github-copy-link"
+                                  @click.stop="copyGithubLink(buildGithubProfileUrl(member.githubAccount))"
+                                >
+                                  {{ buildGithubProfileUrl(member.githubAccount) }}
+                                </button>
+                                <small>{{ member.memberRole === 'primary' ? '主要开发' : '协同开发' }}</small>
+                              </UserCard>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div v-if="detailData.techComponents?.length" class="tech-list">
+                          <div class="detail-section-title">技术组件</div>
+                          <div class="tech-tags">
+                            <n-tooltip
+                              v-for="component in detailData.techComponents"
+                              :key="component.id || component.componentName"
+                              :disabled="!component.componentDesc"
+                              trigger="hover"
+                            >
+                              <template #trigger>
+                                <a
+                                  v-if="component.officialUrl"
+                                  :href="component.officialUrl"
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  class="tech-tag tech-tag-link"
+                                  @click.stop
+                                >
+                                  {{ component.componentName }}
+                                </a>
+                                <span
+                                  v-else
+                                  class="tech-tag"
+                                  :class="{ 'tech-tag-desc': component.componentDesc }"
+                                  @click.stop
+                                >
+                                  {{ component.componentName }}
+                                </span>
+                              </template>
+                              {{ component.componentDesc }}
+                            </n-tooltip>
                           </div>
                         </div>
                       </div>
@@ -141,7 +209,7 @@
                           <n-button type="primary" size="small" @click.stop="goGithub(detailData)">
                             访问 GitHub
                           </n-button>
-                          <n-button v-if="canManageOpenProject" size="small" secondary @click.stop="openEditModal(detailData)">
+                          <n-button v-if="detailData.canEdit" size="small" secondary @click.stop="openEditModal(detailData)">
                             编辑
                           </n-button>
                           <n-dropdown
@@ -328,16 +396,64 @@
             placeholder="选择已有标签，或输入新标签后回车"
           />
         </n-form-item>
-        <n-form-item label="贡献人">
+        <n-form-item label="最高负责人">
+          <n-select
+            v-model:value="editForm.leaderGithubAccount"
+            filterable
+            :options="contributorOptions"
+            placeholder="选择项目最高负责人"
+          />
+        </n-form-item>
+        <n-form-item label="开发团队">
           <div class="contributor-editor">
             <div v-for="(item, idx) in editForm.contributors" :key="idx" class="contributor-row">
-              <n-select v-model:value="item.contributorType" :options="contributorTypeOptions" class="contributor-type" />
+              <n-tag :type="item.githubAccount === editForm.leaderGithubAccount ? 'success' : 'info'" size="small">
+                {{ item.githubAccount === editForm.leaderGithubAccount ? '最高负责人' : '开发者' }}
+              </n-tag>
               <n-input v-model:value="item.wechatName" placeholder="微信名/昵称（留空时保存后自动匹配）" />
               <n-input v-model:value="item.profileUrl" placeholder="GitHub 账号链接" @blur="fillContributorByGithub(item)" />
               <n-input-number v-model:value="item.contributions" placeholder="贡献次数" class="contribution-count" disabled />
               <n-button text type="error" @click="removeContributor(idx)">删除</n-button>
             </div>
             <n-button dashed size="small" @click="addContributor">添加贡献人</n-button>
+          </div>
+        </n-form-item>
+        <n-form-item label="项目模块">
+          <div class="module-editor">
+            <div v-for="(module, moduleIdx) in editForm.modules" :key="module.localKey" class="module-edit-card">
+              <div class="module-edit-head">
+                <n-input v-model:value="module.moduleName" placeholder="模块名称" />
+                <n-input v-model:value="module.moduleDesc" placeholder="模块描述" />
+                <n-button text type="error" @click="removeModule(moduleIdx)">删除模块</n-button>
+              </div>
+              <div class="module-member-editor">
+                <div v-for="(member, memberIdx) in module.members" :key="member.localKey" class="module-member-row">
+                  <n-select
+                    v-model:value="member.githubAccount"
+                    filterable
+                    :options="contributorOptions"
+                    placeholder="选择开发者"
+                    @update:value="value => fillModuleMember(moduleIdx, memberIdx, value)"
+                  />
+                  <n-select v-model:value="member.memberRole" :options="moduleMemberRoleOptions" />
+                  <n-input v-model:value="member.wechatName" placeholder="微信名称" />
+                  <n-button text type="error" @click="removeModuleMember(moduleIdx, memberIdx)">删除</n-button>
+                </div>
+                <n-button dashed size="small" @click="addModuleMember(moduleIdx)">添加模块成员</n-button>
+              </div>
+            </div>
+            <n-button dashed size="small" @click="addModule">添加模块</n-button>
+          </div>
+        </n-form-item>
+        <n-form-item label="技术组件">
+          <div class="tech-editor">
+            <div v-for="(component, idx) in editForm.techComponents" :key="component.localKey" class="tech-row">
+              <n-input v-model:value="component.componentName" placeholder="组件名称，例如 Spring Boot" />
+              <n-input v-model:value="component.componentDesc" placeholder="组件描述" />
+              <n-input v-model:value="component.officialUrl" placeholder="官网/文档链接" />
+              <n-button text type="error" @click="removeTechComponent(idx)">删除</n-button>
+            </div>
+            <n-button dashed size="small" @click="addTechComponent">添加技术组件</n-button>
           </div>
         </n-form-item>
         <n-form-item label="绑定资源">
@@ -377,7 +493,7 @@
 <script setup>
 import {
   NAlert, NBreadcrumb, NBreadcrumbItem, NAvatar, NButton, NEmpty, NPagination, NSpin, NTag,
-  NModal, NForm, NFormItem, NInput, NInputNumber, NSelect, NSpace, NSwitch, NDropdown, createDiscreteApi
+  NModal, NForm, NFormItem, NInput, NInputNumber, NSelect, NSpace, NSwitch, NDropdown, NTooltip, createDiscreteApi
 } from 'naive-ui'
 import { computed, reactive, ref, onMounted } from 'vue'
 import { getUserMemberLevel } from '~/composables/useAuth'
@@ -415,6 +531,7 @@ const sourceEditForm = reactive(emptySourceForm())
 const editModalVisible = ref(false)
 const savingEdit = ref(false)
 const editForm = reactive(emptyEditForm())
+let localKeySeed = 1
 
 const sourceTypeOptions = [
   { label: 'GitHub 用户', value: 'user' },
@@ -427,10 +544,25 @@ const resourceTypeOptions = [
   { label: '工具', value: 'tool' },
 ]
 
-const contributorTypeOptions = [
-  { label: '主要贡献人', value: 'primary' },
-  { label: '协同开发人', value: 'contributor' },
+const moduleMemberRoleOptions = [
+  { label: '主要开发', value: 'primary' },
+  { label: '协同开发', value: 'collaborator' },
 ]
+
+const contributorOptions = computed(() => {
+  const seen = new Set()
+  return editForm.contributors.reduce((options, item) => {
+    const account = normalizeGithubOwner(item.githubAccount || item.profileUrl)
+    const key = account.toLowerCase()
+    if (!account || seen.has(key)) return options
+    seen.add(key)
+    options.push({
+      label: `${item.wechatName || account}（${buildGithubProfileUrl(account)}）`,
+      value: account,
+    })
+    return options
+  }, [])
+})
 
 async function toggleExpand(item) {
   if (expandedId.value === item.id) {
@@ -468,6 +600,17 @@ async function toggleFavorite(item) {
     }
   } catch (e) {
     message.error(e?.data?.msg || '收藏操作失败')
+  }
+}
+
+async function copyGithubLink(url) {
+  const link = buildGithubProfileUrl(url)
+  if (!link) return
+  try {
+    await navigator.clipboard.writeText(link)
+    message.success('GitHub 链接已复制')
+  } catch {
+    message.error('复制失败，请手动复制')
   }
 }
 
@@ -642,6 +785,10 @@ async function openEditModal(project) {
     tagValues: tags.map(Number),
     resources: (detail.resources || []).map(toEditableResource),
     contributors: (detail.contributors || []).map(toEditableContributor),
+    leaderGithubAccount: normalizeGithubOwner(detail.leader?.githubAccount || detail.contributors?.find(item => item.contributorType === 'primary')?.githubAccount),
+    originalLeaderGithubAccount: normalizeGithubOwner(detail.leader?.githubAccount || detail.contributors?.find(item => item.contributorType === 'primary')?.githubAccount),
+    modules: (detail.modules || []).map(toEditableModule),
+    techComponents: (detail.techComponents || []).map(toEditableTechComponent),
   })
   if (!editForm.contributors.length) addContributor()
   editModalVisible.value = true
@@ -664,7 +811,7 @@ function addContributor() {
   editForm.contributors.push({
     githubAccount: '',
     wechatName: '',
-    contributorType: editForm.contributors.length === 0 ? 'primary' : 'contributor',
+    contributorType: 'contributor',
     contributions: 0,
     avatarUrl: '',
     profileUrl: '',
@@ -674,12 +821,130 @@ function addContributor() {
 
 function removeContributor(index) {
   editForm.contributors.splice(index, 1)
+  ensureLeaderInContributors()
 }
 
 function fillContributorByGithub(item) {
   if (!item?.profileUrl?.trim()) return
   item.profileUrl = buildGithubProfileUrl(item.profileUrl)
   item.githubAccount = normalizeGithubOwner(item.profileUrl)
+  if (!editForm.leaderGithubAccount && item.githubAccount) {
+    editForm.leaderGithubAccount = item.githubAccount
+  }
+  ensureLeaderInContributors()
+}
+
+function ensureLeaderInContributors() {
+  const accounts = contributorOptions.value.map(item => item.value)
+  if (!accounts.length) {
+    editForm.leaderGithubAccount = ''
+    return
+  }
+  if (!accounts.some(account => account.toLowerCase() === normalizeGithubOwner(editForm.leaderGithubAccount).toLowerCase())) {
+    editForm.leaderGithubAccount = accounts[0]
+  }
+}
+
+function toEditableModule(item) {
+  return {
+    id: item.id || null,
+    localKey: nextLocalKey(),
+    moduleName: item.moduleName || '',
+    moduleDesc: item.moduleDesc || '',
+    sortOrder: Number(item.sortOrder || 0),
+    members: (item.members || []).map(toEditableModuleMember),
+  }
+}
+
+function toEditableModuleMember(item) {
+  return {
+    contributorId: item.contributorId || null,
+    localKey: nextLocalKey(),
+    githubAccount: normalizeGithubOwner(item.githubAccount),
+    wechatName: item.wechatName || '',
+    memberRole: item.memberRole === 'primary' ? 'primary' : 'collaborator',
+    sortOrder: Number(item.sortOrder || 0),
+  }
+}
+
+function toEditableTechComponent(item) {
+  return {
+    componentId: item.componentId || item.id || null,
+    localKey: nextLocalKey(),
+    componentName: item.componentName || '',
+    componentCode: item.componentCode || '',
+    componentDesc: item.componentDesc || '',
+    officialUrl: item.officialUrl || '',
+    sortOrder: Number(item.sortOrder || 0),
+  }
+}
+
+function addModule() {
+  editForm.modules.push({
+    id: null,
+    localKey: nextLocalKey(),
+    moduleName: '',
+    moduleDesc: '',
+    sortOrder: editForm.modules.length,
+    members: [],
+  })
+}
+
+function removeModule(index) {
+  editForm.modules.splice(index, 1)
+}
+
+function addModuleMember(moduleIndex) {
+  const module = editForm.modules[moduleIndex]
+  if (!module) return
+  module.members.push({
+    contributorId: null,
+    localKey: nextLocalKey(),
+    githubAccount: '',
+    wechatName: '',
+    memberRole: 'collaborator',
+    sortOrder: module.members.length,
+  })
+}
+
+function removeModuleMember(moduleIndex, memberIndex) {
+  editForm.modules[moduleIndex]?.members?.splice(memberIndex, 1)
+}
+
+function fillModuleMember(moduleIndex, memberIndex, githubAccount) {
+  const member = editForm.modules[moduleIndex]?.members?.[memberIndex]
+  if (!member) return
+  const contributor = editForm.contributors.find(item => normalizeGithubOwner(item.githubAccount || item.profileUrl) === githubAccount)
+  member.githubAccount = githubAccount
+  member.wechatName = contributor?.wechatName || member.wechatName || ''
+}
+
+function moduleMemberAvatar(member) {
+  const account = normalizeGithubOwner(member?.githubAccount)
+  if (!account) return ''
+  return editForm.contributors.find(item => normalizeGithubOwner(item.githubAccount || item.profileUrl).toLowerCase() === account.toLowerCase())?.avatarUrl
+    || detailData.value?.contributors?.find(item => normalizeGithubOwner(item.githubAccount || item.profileUrl).toLowerCase() === account.toLowerCase())?.avatarUrl
+    || ''
+}
+
+function addTechComponent() {
+  editForm.techComponents.push({
+    componentId: null,
+    localKey: nextLocalKey(),
+    componentName: '',
+    componentCode: '',
+    componentDesc: '',
+    officialUrl: '',
+    sortOrder: editForm.techComponents.length,
+  })
+}
+
+function removeTechComponent(index) {
+  editForm.techComponents.splice(index, 1)
+}
+
+function nextLocalKey() {
+  return `local-${localKeySeed++}`
 }
 
 function buildGithubProfileUrl(githubAccount) {
@@ -809,6 +1074,16 @@ async function saveProjectEdit() {
   try {
     const tagIds = editForm.tagValues.filter(v => typeof v === 'number')
     const customTags = editForm.tagValues.filter(v => typeof v === 'string' && v.trim())
+    const normalizedLeader = normalizeGithubOwner(editForm.leaderGithubAccount)
+    const contributorAccounts = contributorOptions.value.map(item => item.value.toLowerCase())
+    if (!contributorAccounts.length) {
+      message.warning('请至少保留一名开发团队成员')
+      return
+    }
+    if (!normalizedLeader || !contributorAccounts.includes(normalizedLeader.toLowerCase())) {
+      message.warning('最高负责人必须从开发团队中选择')
+      return
+    }
     await apiEditOpenProject({
       id: editForm.id,
       projectName: editForm.projectName,
@@ -826,9 +1101,43 @@ async function saveProjectEdit() {
           ...item,
           githubAccount: normalizeGithubOwner(item.profileUrl || item.githubAccount),
           profileUrl: buildGithubProfileUrl(item.profileUrl || item.githubAccount),
+          contributorType: 'contributor',
+          sortOrder: idx,
+        })),
+      modules: editForm.modules
+        .filter(item => item.moduleName?.trim())
+        .map((module, idx) => ({
+          id: module.id,
+          moduleName: module.moduleName,
+          moduleDesc: module.moduleDesc,
+          sortOrder: idx,
+          members: (module.members || [])
+            .filter(member => member.githubAccount)
+            .map((member, memberIdx) => ({
+              contributorId: member.contributorId,
+              githubAccount: normalizeGithubOwner(member.githubAccount),
+              wechatName: member.wechatName,
+              memberRole: member.memberRole === 'primary' ? 'primary' : 'collaborator',
+              sortOrder: memberIdx,
+            })),
+        })),
+      techComponents: editForm.techComponents
+        .filter(item => item.componentName?.trim())
+        .map((item, idx) => ({
+          componentId: item.componentId,
+          componentName: item.componentName,
+          componentCode: item.componentCode,
+          componentDesc: item.componentDesc,
+          officialUrl: item.officialUrl,
           sortOrder: idx,
         })),
     })
+    if (normalizedLeader && normalizedLeader !== editForm.originalLeaderGithubAccount) {
+      await apiTransferOpenProjectLeader({
+        projectId: editForm.id,
+        githubAccount: normalizedLeader,
+      })
+    }
     message.success('开源项目已保存')
     editModalVisible.value = false
     await loadTags()
@@ -905,6 +1214,10 @@ function emptyEditForm() {
     tagValues: [],
     resources: [],
     contributors: [],
+    leaderGithubAccount: '',
+    originalLeaderGithubAccount: '',
+    modules: [],
+    techComponents: [],
   }
 }
 
@@ -973,9 +1286,23 @@ onMounted(async () => {
 .contributors { margin-top: 22px; }
 .contributor-list { display: flex; gap: 8px; flex-wrap: wrap; }
 .contributor { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 999px; background: #eef2ff; color: #334155; text-decoration: none; font-size: 12px; }
-.contributor:hover { color: #1d4ed8; background: #dbeafe; }
-.github-account { color: #64748b; }
+.contributor:hover { background: #e0e7ff; }
+.github-copy-link { border: 0; padding: 0; background: transparent; color: #475569; font: inherit; cursor: pointer; }
+.github-copy-link:hover { color: #1d4ed8; text-decoration: underline; }
 .contributor small { color: #64748b; }
+.module-list, .tech-list { margin-top: 22px; }
+.module-card { border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; padding: 12px; margin-bottom: 8px; }
+.module-head { display: flex; flex-direction: column; gap: 4px; }
+.module-head strong { color: #1e293b; font-size: 13px; }
+.module-head span { color: #64748b; font-size: 12px; line-height: 1.5; }
+.module-members { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.module-member { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 999px; background: #f1f5f9; color: #334155; font-size: 12px; }
+.module-member small { color: #64748b; }
+.tech-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+.tech-tag { display: inline-flex; align-items: center; padding: 5px 10px; border-radius: 999px; background: #ecfeff; color: #0f766e; font-size: 12px; text-decoration: none; border: 1px solid #99f6e4; }
+.tech-tag-desc { cursor: help; }
+.tech-tag-link { cursor: pointer; }
+.tech-tag-link:hover { color: #115e59; background: #ccfbf1; border-color: #5eead4; }
 .detail-meta { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
 .dm-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 13px; }
 .dm-label { color: #94a3b8; }
@@ -1004,10 +1331,15 @@ onMounted(async () => {
 .source-form-head strong { font-size: 14px; color: #1e293b; }
 .modal-form { padding-top: 0; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 16px; }
-.resource-editor, .contributor-editor { width: 100%; display: flex; flex-direction: column; gap: 8px; }
+.resource-editor, .contributor-editor, .module-editor, .tech-editor { width: 100%; display: flex; flex-direction: column; gap: 8px; }
 .resource-row { display: grid; grid-template-columns: 120px 1.2fr 1fr auto; gap: 8px; align-items: center; }
 .resource-preview { min-width: 0; color: #64748b; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.contributor-row { display: grid; grid-template-columns: 130px 1fr 1fr 1fr 110px auto; gap: 8px; align-items: center; }
+.contributor-row { display: grid; grid-template-columns: 100px 1fr 1fr 130px auto; gap: 8px; align-items: center; }
+.module-edit-card { border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; background: #f8fafc; }
+.module-edit-head { display: grid; grid-template-columns: 180px 1fr auto; gap: 8px; align-items: center; margin-bottom: 10px; }
+.module-member-editor { display: flex; flex-direction: column; gap: 8px; }
+.module-member-row { display: grid; grid-template-columns: 1fr 130px 1fr auto; gap: 8px; align-items: center; }
+.tech-row { display: grid; grid-template-columns: 180px 1fr 1fr auto; gap: 8px; align-items: center; }
 .expand-enter-active, .expand-leave-active { transition: max-height 0.25s ease, opacity 0.2s ease; max-height: 640px; overflow: hidden; }
 .expand-enter-from, .expand-leave-to { max-height: 0; opacity: 0; }
 @media (max-width: 1024px) {
@@ -1019,7 +1351,7 @@ onMounted(async () => {
   .card-footer { grid-column: 1; grid-row: auto; align-items: flex-start; padding: 14px 0 0 28px; }
   .footer-right { align-items: flex-start; }
   .github-stats { align-items: flex-start; }
-  .resource-row, .contributor-row { grid-template-columns: 1fr; }
+  .resource-row, .contributor-row, .module-edit-head, .module-member-row, .tech-row { grid-template-columns: 1fr; }
   .source-item { flex-direction: column; }
 }
 </style>

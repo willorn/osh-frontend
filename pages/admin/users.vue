@@ -95,49 +95,13 @@
       <n-form size="small" ref="inviteFormRef" :model="inviteForm" :rules="inviteRules">
         <n-form-item label="邀请用户">
           <div class="invite-row-list">
-            <div class="invite-bulk-row">
-              <div class="invite-bulk-label">批量设置</div>
-              <n-select
-                v-model:value="inviteBulk.roleId"
-                :options="inviteRoleOptions"
-                placeholder="统一选择角色"
-                @update:value="applyInviteBulkRole"
-              />
-              <n-input-number
-                v-model:value="inviteBulk.points"
-                :min="0"
-                :max="99999"
-                placeholder="统一积分"
-                @update:value="applyInviteBulkPoints"
-              />
-              <div v-if="inviteBulkNeedExpire" class="invite-expire-cell invite-bulk-expire">
-                <n-date-picker
-                  v-if="!inviteBulk.permanent"
-                  v-model:value="inviteBulk.expireTimestamp"
-                  type="datetime"
-                  size="small"
-                  placeholder="统一到期时间"
-                  clearable
-                  @update:value="applyInviteBulkExpire"
-                />
-                <n-checkbox
-                  v-model:checked="inviteBulk.permanent"
-                  size="small"
-                  @update:checked="applyInviteBulkPermanent"
-                >
-                  永久
-                </n-checkbox>
-              </div>
-              <div v-else class="invite-expire-placeholder">-</div>
-              <div></div>
-            </div>
             <div v-for="(row, index) in inviteRows" :key="row.id" class="invite-email-row">
               <n-input
                 :ref="el => setInviteEmailInputRef(el, index)"
                 v-model:value="row.email"
-                placeholder="填写用户邮箱（按住回车换行）"
+                placeholder="填写用户邮箱，多个邮箱用英文逗号分隔（按住回车换行）"
                 clearable
-                :status="row.email && !isValidEmail(row.email) ? 'error' : undefined"
+                :status="row.email && !areInviteEmailsValid(row.email) ? 'error' : undefined"
                 @keydown.enter.prevent="handleInviteEmailEnter(index)"
               />
               <n-select
@@ -330,23 +294,16 @@ const inviteRoleOptions = [
   { label: '普通管理员', value: 5 },
   { label: '核心开发者', value: 6 },
 ]
-const inviteBulk = reactive({
-  roleId: 4,
-  points: 188,
-  permanent: false,
-  expireTimestamp: null,
-})
 
-// VIP(roleId=3) 和 小班(roleId=4) 需要指定有效期
-const inviteBulkNeedExpire = computed(() => inviteBulk.roleId === 4)
 const inviteRows = ref([createInviteRow()])
 const inviteItems = computed(() => buildInviteItems())
 const inviteEmailList = computed(() => inviteItems.value.map(item => item.email))
 const inviteSuccessCount = computed(() => inviteResults.value.filter(item => item.success).length)
 const inviteFailCount = computed(() => inviteResults.value.filter(item => !item.success).length)
+const duplicateInviteEmails = computed(() => findDuplicateInviteEmails())
 
 const canSubmitInvite = computed(() => {
-  return inviteItems.value.length > 0 && inviteRows.value.every(isInviteRowValid)
+  return inviteItems.value.length > 0 && inviteRows.value.every(isInviteRowValid) && duplicateInviteEmails.value.length === 0
 })
 
 const inviteRules = {}
@@ -355,10 +312,10 @@ function createInviteRow() {
   return {
     id: Date.now() + Math.random(),
     email: '',
-    roleId: inviteBulk.roleId,
-    points: inviteBulk.points ?? 188,
-    permanent: inviteBulkNeedExpire.value ? inviteBulk.permanent : false,
-    expireTimestamp: inviteBulkNeedExpire.value && !inviteBulk.permanent ? inviteBulk.expireTimestamp : null
+    roleId: 4,
+    points: 188,
+    permanent: false,
+    expireTimestamp: null
   }
 }
 
@@ -399,75 +356,69 @@ function onInviteRowRoleChange(row) {
   row.expireTimestamp = null
 }
 
-function applyInviteBulkRole() {
-  inviteBulk.permanent = false
-  inviteBulk.expireTimestamp = null
-  inviteRows.value.forEach(row => {
-    row.roleId = inviteBulk.roleId
-    row.permanent = false
-    row.expireTimestamp = null
-  })
-}
-
-function applyInviteBulkPoints() {
-  inviteRows.value.forEach(row => {
-    row.points = inviteBulk.points ?? 188
-  })
-}
-
-function applyInviteBulkExpire() {
-  if (!inviteBulkNeedExpire.value || inviteBulk.permanent) return
-  inviteRows.value.forEach(row => {
-    if (row.roleId === inviteBulk.roleId) {
-      row.expireTimestamp = inviteBulk.expireTimestamp
-    }
-  })
-}
-
-function applyInviteBulkPermanent(checked) {
-  if (!inviteBulkNeedExpire.value) return
-  if (checked) inviteBulk.expireTimestamp = null
-  inviteRows.value.forEach(row => {
-    if (row.roleId === inviteBulk.roleId) {
-      row.permanent = checked
-      if (checked) row.expireTimestamp = null
-    }
-  })
-}
-
 function inviteRowNeedExpire(row) {
   return row.roleId === 3 || row.roleId === 4
 }
 
 function isInviteRowValid(row) {
-  const email = String(row.email || '').trim()
-  if (!email || !isValidEmail(email) || !row.roleId) return false
+  const emails = parseInviteEmails(row.email)
+  if (!emails.length || !emails.every(isValidEmail) || !row.roleId) return false
   if (inviteRowNeedExpire(row) && !row.permanent && !row.expireTimestamp) return false
   return true
+}
+
+function parseInviteEmails(value) {
+  return String(value || '')
+    .split(/[,\r\n]+/)
+    .map(item => item.trim())
+    .filter(Boolean)
+}
+
+function areInviteEmailsValid(value) {
+  const emails = parseInviteEmails(value)
+  return emails.length > 0 && emails.every(isValidEmail)
 }
 
 function buildInviteItems() {
   const seen = new Set()
   const items = []
   for (const row of inviteRows.value) {
-    const email = String(row.email || '').trim()
-    if (!email || seen.has(email)) continue
-    seen.add(email)
-    const item = {
-      email,
-      roleId: row.roleId,
-      points: row.points ?? 188
-    }
-    if (inviteRowNeedExpire(row)) {
-      if (row.permanent) {
-        item.permanent = true
-      } else if (row.expireTimestamp) {
-        item.expireTime = formatDateTime(row.expireTimestamp)
+    for (const email of parseInviteEmails(row.email)) {
+      const key = email.toLowerCase()
+      if (seen.has(key)) continue
+      seen.add(key)
+      const item = {
+        email,
+        roleId: row.roleId,
+        points: row.points ?? 188
       }
+      if (inviteRowNeedExpire(row)) {
+        if (row.permanent) {
+          item.permanent = true
+        } else if (row.expireTimestamp) {
+          item.expireTime = formatDateTime(row.expireTimestamp)
+        }
+      }
+      items.push(item)
     }
-    items.push(item)
   }
   return items
+}
+
+function findDuplicateInviteEmails() {
+  const seen = new Set()
+  const duplicates = new Set()
+  for (const row of inviteRows.value) {
+    for (const email of parseInviteEmails(row.email)) {
+      const key = email.toLowerCase()
+      if (seen.has(key)) {
+        duplicates.add(email)
+      } else {
+        seen.add(key)
+      }
+    }
+  }
+  return Array.from(duplicates)
 }
 
 async function submitInvite() {
@@ -489,6 +440,10 @@ async function submitInvite() {
       alert('请检查每个用户的邮箱、角色、积分和有效期')
       return
     }
+    if (duplicateInviteEmails.value.length) {
+      alert(`存在重复邮箱：${duplicateInviteEmails.value.join('，')}`)
+      return
+    }
 
     const res = await $fetch(`${fetchConfig.baseURL}/admin/invite/batch`, {
       method: 'POST',
@@ -497,7 +452,12 @@ async function submitInvite() {
     })
     const results = normalizeBatchInviteResults(res, inviteEmailList.value)
     inviteResults.value = results
-    alert(`邀请完成：成功 ${results.filter(item => item.success).length} 个，失败 ${results.filter(item => !item.success).length} 个`)
+    const failedEmails = results.filter(item => !item.success).map(item => item.email)
+    if (failedEmails.length) {
+      alert(`邀请完成：成功 ${results.filter(item => item.success).length} 个，失败 ${failedEmails.length} 个。失败邮箱：${failedEmails.join('，')}`)
+    } else {
+      alert(`邀请完成：成功 ${results.length} 个`)
+    }
   } catch (e) {
     alert(e?.data?.msg || '邀请失败')
   } finally {
@@ -637,41 +597,6 @@ useHead({ title: '用户管理' })
   align-items: center;
 }
 
-.invite-bulk-row {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(220px, 1.5fr) minmax(130px, 0.8fr) 120px minmax(180px, 1fr) auto;
-  gap: 10px;
-  align-items: center;
-  min-height: 36px;
-}
-
-.invite-bulk-row::before {
-  content: '';
-  position: absolute;
-  inset: -6px 0;
-  z-index: 0;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  pointer-events: none;
-}
-
-.invite-bulk-row > * {
-  position: relative;
-  z-index: 1;
-}
-
-.invite-bulk-label {
-  color: #475569;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.invite-bulk-expire {
-  min-width: 180px;
-}
-
 .invite-expire-cell {
   display: flex;
   align-items: center;
@@ -718,8 +643,7 @@ useHead({ title: '用户管理' })
 }
 
 @media (max-width: 900px) {
-  .invite-email-row,
-  .invite-bulk-row {
+  .invite-email-row {
     grid-template-columns: 1fr;
     padding-bottom: 10px;
     border-bottom: 1px solid #f1f5f9;
