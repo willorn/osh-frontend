@@ -16,10 +16,26 @@
       </div>
 
       <div class="form-grid">
-        <n-form-item label="前端路由">
+        <n-form-item label="访问类型">
+          <n-select
+            v-model:value="formValue.accessType"
+            :options="accessTypeOptions"
+            placeholder="请选择访问类型"
+          />
+        </n-form-item>
+      </div>
+
+      <div class="form-grid">
+        <n-form-item v-if="isInternalTool" label="前端路由">
           <n-input
             v-model:value="formValue.routePath"
             placeholder="请输入站内工具路由，如 /tool/image-to-pdf"
+          />
+        </n-form-item>
+        <n-form-item v-else label="第三方地址">
+          <n-input
+            v-model:value="formValue.iframeUrl"
+            placeholder="请输入第三方 iframe 地址，如 https://example.com/tool"
           />
         </n-form-item>
       </div>
@@ -130,7 +146,9 @@ const formValue = reactive({
   toolName: '',
   no: '',
   description: '',
+  accessType: 1,
   routePath: '',
+  iframeUrl: '',
   githubUrl: '',
   status: 1,
   remark: '',
@@ -175,11 +193,16 @@ const resourceTypeOptions = [
   { label: '免费', value: 'FREE' },
   { label: '消耗工具点数', value: 'CASH_POINT' },
 ];
+const accessTypeOptions = [
+  { label: '站内工具', value: 1 },
+  { label: '第三方站点', value: 2 },
+];
 
 const MAX_TAG_COUNT = 3;
 const MAX_RECOMMEND_TAG_COUNT = 5;
 const paidResourceTypes = ['CASH_POINT'];
 const showPointCostEditor = computed(() => paidResourceTypes.includes(formValue.resourceType));
+const isInternalTool = computed(() => Number(formValue.accessType || 1) === 1);
 
 const resourceTypeNumMap = {
   0: 'FREE',
@@ -208,7 +231,9 @@ function resetForm() {
   formValue.toolName = source.toolName || '';
   formValue.no = source.no || '';
   formValue.description = source.description || '';
+  formValue.accessType = Number(source.accessType || source.access_type || 1);
   formValue.routePath = source.routePath || source.route_path || '';
+  formValue.iframeUrl = source.iframeUrl || source.iframe_url || '';
   formValue.githubUrl = source.githubUrl || source.github_url || '';
   formValue.status = source.status ?? 1;
   formValue.remark = source.remark || '';
@@ -299,8 +324,13 @@ async function handleSubmit() {
     message.error('请输入工具名称');
     return;
   }
-  if (!formValue.routePath?.trim()) {
-    message.error('请输入站内工具前端路由');
+  if (isInternalTool.value) {
+    if (!formValue.routePath?.trim()) {
+      message.error('请输入站内工具前端路由');
+      return;
+    }
+  } else if (!formValue.iframeUrl?.trim()) {
+    message.error('请输入第三方工具 iframe 地址');
     return;
   }
   if (formValue.tags.length > MAX_TAG_COUNT) {
@@ -319,7 +349,9 @@ async function handleSubmit() {
       toolName: formValue.toolName,
       description: formValue.description,
       logoUrl: null,
-      routePath: formValue.routePath,
+      accessType: Number(formValue.accessType || 1),
+      routePath: isInternalTool.value ? formValue.routePath : null,
+      iframeUrl: isInternalTool.value ? null : formValue.iframeUrl,
       githubUrl: formValue.githubUrl,
       status: formValue.status,
       remark: formValue.remark,
