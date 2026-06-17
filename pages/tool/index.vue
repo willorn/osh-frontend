@@ -177,11 +177,8 @@
                       <span class="tag">【{{ formatResourceType(item.resourceType) }}】</span>
                       <span class="main-title">{{ item.toolName }}</span>
                       <span v-if="item.description" class="description-text">{{ item.description }}</span>
-
-
+                      <span class="access-type">{{ formatAccessType(item.accessType || item.access_type) }}</span>
                     </div>
-
-<!--                    <span class="access-type">{{ formatAccessType(item.accessType) }}</span>-->
                     <div class="meta-group">
                       <span v-if="isPaidResourceType(item.resourceType)" class="meta-item package-price">
                         {{ formatMinSortPackagePrice(item) }}
@@ -250,6 +247,21 @@
                       @click.stop="handleEditTool(item)"
                     >
                       修改
+                    </button>
+                    <button
+                      class="row-action-btn open"
+                      type="button"
+                      @click.stop="handleOpenFullPageTool(item)"
+                    >
+                      铺满页打开
+                    </button>
+                    <button
+                      v-if="isIframeTool(item) && getEmbedUrl(item)"
+                      class="row-action-btn open ghost"
+                      type="button"
+                      @click.stop="handleOpenIframeInNewTab(item)"
+                    >
+                      新标签打开
                     </button>
                     </div>
                   </div>
@@ -933,9 +945,16 @@ const recordToolView = async (item) => {
 
 const getFieldValue = (item, camelKey, snakeKey) => item?.[camelKey] || item?.[snakeKey] || '';
 
-const getEmbedUrl = (item) => getFieldValue(item, 'routePath', 'route_path');
+const getAccessType = (item) => Number(getFieldValue(item, 'accessType', 'access_type') || 1);
 
-const isIframeTool = () => false;
+const getEmbedUrl = (item) => {
+  if (isIframeTool(item)) {
+    return getFieldValue(item, 'iframeUrl', 'iframe_url');
+  }
+  return getFieldValue(item, 'routePath', 'route_path');
+};
+
+const isIframeTool = (item) => getAccessType(item) === 2;
 
 const getUrlOrigin = (url) => {
   if (!url || !process.client) {
@@ -949,11 +968,53 @@ const getUrlOrigin = (url) => {
 };
 
 const getRuntimeComponent = (item) => {
+  if (isIframeTool(item)) {
+    return null;
+  }
   const routePath = getFieldValue(item, 'routePath', 'route_path');
   return runtimeToolMap[routePath] || null;
 };
 
-const formatAccessType = () => '站内页面';
+const formatAccessType = (accessType) => Number(accessType || 1) === 2 ? '第三方站点' : '站内页面';
+
+const ensureToolAccessible = (item) => {
+  const { message } = createDiscreteApi(['message']);
+  if (!item) {
+    return false;
+  }
+  if (!isLoggedIn.value) {
+    message.warning('请先登录后再使用该工具');
+    navigateTo('/login?from=/tool');
+    return false;
+  }
+  if (!canExpandTool(item)) {
+    message.warning('当前工具点数不足，无法打开该工具');
+    return false;
+  }
+  return true;
+};
+
+const handleOpenFullPageTool = (item) => {
+  if (!item?.id || !ensureToolAccessible(item)) {
+    return;
+  }
+  navigateTo(`/tool/detail/${item.id}`);
+};
+
+const handleOpenIframeInNewTab = (item) => {
+  const { message } = createDiscreteApi(['message']);
+  const url = getEmbedUrl(item);
+  if (!isIframeTool(item) || !url || !ensureToolAccessible(item)) {
+    return;
+  }
+  if (!process.client) {
+    return;
+  }
+  const opened = window.open(url, '_blank', 'noopener,noreferrer');
+  if (!opened) {
+    message.warning('浏览器拦截了新标签页，请允许弹窗后重试');
+  }
+};
 
 const formatResourceType = (resourceType) => {
   const typeMap = {
@@ -1718,6 +1779,24 @@ const rollbackFavorite = (tool, wasCollected, previousCount) => {
 .row-action-btn.edit:hover {
   border-color: #4f46e5;
   color: #4f46e5;
+}
+.row-action-btn.open {
+  border-color: #18a058;
+  color: #13784b;
+}
+.row-action-btn.open:hover {
+  background: #f0faf5;
+  border-color: #18a058;
+  color: #18a058;
+}
+.row-action-btn.open.ghost {
+  border-color: #2563eb;
+  color: #1d4ed8;
+}
+.row-action-btn.open.ghost:hover {
+  background: #eff6ff;
+  border-color: #2563eb;
+  color: #1d4ed8;
 }
 .tool-embed-area {
   background: #fafafa;
