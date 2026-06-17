@@ -251,8 +251,7 @@ const menus = ref([
       { name: '订单看板', path: '/admin/order-dashboard', match: [{ name: 'admin-order-dashboard' }], iconComponent: OrderIcon },
       { name: '订单管理', path: '/admin/orders', match: [{ name: 'admin-orders' }], iconComponent: OrderIcon },
     ],
-  },
-  { name: '后台管理', path: '/admin/users', match: [{ name: 'admin-users' }], iconComponent: AuditIcon }
+  }
 ]);
 
 const SearchBarRef = ref(null);
@@ -491,10 +490,7 @@ onMounted(() => {
     } catch {}
   }
   if (!isFounder) {
-    const adminMenuIndex = menus.value.findIndex(item => item.name === '后台管理')
-    if (adminMenuIndex !== -1) {
-      menus.value.splice(adminMenuIndex, 1)
-    }
+    menus.value = menus.value.filter(item => item.name !== '后台管理')
   }
 
   const { hasAnyPermission } = usePermission()
