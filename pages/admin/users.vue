@@ -95,12 +95,50 @@
       <n-form size="small" ref="inviteFormRef" :model="inviteForm" :rules="inviteRules">
         <n-form-item label="邀请用户">
           <div class="invite-row-list">
+            <div class="invite-bulk-row">
+              <div class="invite-bulk-label">批量设置</div>
+              <n-select
+                v-model:value="inviteBulk.roleId"
+                :options="inviteRoleOptions"
+                placeholder="统一选择角色"
+                @update:value="applyInviteBulkRole"
+              />
+              <n-input-number
+                v-model:value="inviteBulk.points"
+                :min="0"
+                :max="99999"
+                placeholder="统一积分"
+                @update:value="applyInviteBulkPoints"
+              />
+              <div v-if="inviteBulkNeedExpire" class="invite-expire-cell invite-bulk-expire">
+                <n-date-picker
+                  v-if="!inviteBulk.permanent"
+                  v-model:value="inviteBulk.expireTimestamp"
+                  type="datetime"
+                  size="small"
+                  placeholder="统一到期时间"
+                  clearable
+                  @update:value="applyInviteBulkExpire"
+                />
+                <n-checkbox
+                  v-model:checked="inviteBulk.permanent"
+                  size="small"
+                  @update:checked="applyInviteBulkPermanent"
+                >
+                  永久
+                </n-checkbox>
+              </div>
+              <div v-else class="invite-expire-placeholder">-</div>
+              <div></div>
+            </div>
             <div v-for="(row, index) in inviteRows" :key="row.id" class="invite-email-row">
               <n-input
+                :ref="el => setInviteEmailInputRef(el, index)"
                 v-model:value="row.email"
-                placeholder="填写用户邮箱"
+                placeholder="填写用户邮箱（按住回车换行）"
                 clearable
                 :status="row.email && !isValidEmail(row.email) ? 'error' : undefined"
+                @keydown.enter.prevent="handleInviteEmailEnter(index)"
               />
               <n-select
                 v-model:value="row.roleId"
@@ -163,7 +201,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watch, computed } from 'vue'
+import { ref, reactive, onMounted, watch, computed, nextTick } from 'vue'
 import {
   NInput, NSelect, NButton, NTag, NAvatar, NPagination, NSpin, NModal, NForm, NFormItem, NInputNumber, NDatePicker, NCheckbox
 } from 'naive-ui'
@@ -283,7 +321,7 @@ const showInviteModal = ref(false)
 const inviteLoading = ref(false)
 const inviteResults = ref([])
 const inviteFormRef = ref(null)
-const inviteRows = ref([createInviteRow()])
+const inviteEmailInputRefs = ref([])
 const inviteForm = reactive({})
 const inviteRoleOptions = [
   { label: '普通开发者', value: 2 },
@@ -292,8 +330,16 @@ const inviteRoleOptions = [
   { label: '普通管理员', value: 5 },
   { label: '核心开发者', value: 6 },
 ]
+const inviteBulk = reactive({
+  roleId: 4,
+  points: 188,
+  permanent: false,
+  expireTimestamp: null,
+})
 
 // VIP(roleId=3) 和 小班(roleId=4) 需要指定有效期
+const inviteBulkNeedExpire = computed(() => inviteBulk.roleId === 4)
+const inviteRows = ref([createInviteRow()])
 const inviteItems = computed(() => buildInviteItems())
 const inviteEmailList = computed(() => inviteItems.value.map(item => item.email))
 const inviteSuccessCount = computed(() => inviteResults.value.filter(item => item.success).length)
@@ -309,10 +355,10 @@ function createInviteRow() {
   return {
     id: Date.now() + Math.random(),
     email: '',
-    roleId: null,
-    points: 188,
-    permanent: false,
-    expireTimestamp: null
+    roleId: inviteBulk.roleId,
+    points: inviteBulk.points ?? 188,
+    permanent: inviteBulkNeedExpire.value ? inviteBulk.permanent : false,
+    expireTimestamp: inviteBulkNeedExpire.value && !inviteBulk.permanent ? inviteBulk.expireTimestamp : null
   }
 }
 
@@ -320,14 +366,73 @@ function addInviteRow() {
   inviteRows.value.push(createInviteRow())
 }
 
+function setInviteEmailInputRef(el, index) {
+  if (el) inviteEmailInputRefs.value[index] = el
+}
+
+function focusInviteEmailInput(index) {
+  nextTick(() => {
+    const input = inviteEmailInputRefs.value[index]
+    if (input?.focus) {
+      input.focus()
+      return
+    }
+    input?.$el?.querySelector?.('input')?.focus()
+  })
+}
+
+function handleInviteEmailEnter(index) {
+  if (index === inviteRows.value.length - 1) {
+    addInviteRow()
+  }
+  focusInviteEmailInput(index + 1)
+}
+
 function removeInviteRow(index) {
   if (inviteRows.value.length === 1) return
   inviteRows.value.splice(index, 1)
+  inviteEmailInputRefs.value.splice(index, 1)
 }
 
 function onInviteRowRoleChange(row) {
   row.permanent = false
   row.expireTimestamp = null
+}
+
+function applyInviteBulkRole() {
+  inviteBulk.permanent = false
+  inviteBulk.expireTimestamp = null
+  inviteRows.value.forEach(row => {
+    row.roleId = inviteBulk.roleId
+    row.permanent = false
+    row.expireTimestamp = null
+  })
+}
+
+function applyInviteBulkPoints() {
+  inviteRows.value.forEach(row => {
+    row.points = inviteBulk.points ?? 188
+  })
+}
+
+function applyInviteBulkExpire() {
+  if (!inviteBulkNeedExpire.value || inviteBulk.permanent) return
+  inviteRows.value.forEach(row => {
+    if (row.roleId === inviteBulk.roleId) {
+      row.expireTimestamp = inviteBulk.expireTimestamp
+    }
+  })
+}
+
+function applyInviteBulkPermanent(checked) {
+  if (!inviteBulkNeedExpire.value) return
+  if (checked) inviteBulk.expireTimestamp = null
+  inviteRows.value.forEach(row => {
+    if (row.roleId === inviteBulk.roleId) {
+      row.permanent = checked
+      if (checked) row.expireTimestamp = null
+    }
+  })
 }
 
 function inviteRowNeedExpire(row) {
@@ -532,6 +637,41 @@ useHead({ title: '用户管理' })
   align-items: center;
 }
 
+.invite-bulk-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(220px, 1.5fr) minmax(130px, 0.8fr) 120px minmax(180px, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 36px;
+}
+
+.invite-bulk-row::before {
+  content: '';
+  position: absolute;
+  inset: -6px 0;
+  z-index: 0;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  pointer-events: none;
+}
+
+.invite-bulk-row > * {
+  position: relative;
+  z-index: 1;
+}
+
+.invite-bulk-label {
+  color: #475569;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.invite-bulk-expire {
+  min-width: 180px;
+}
+
 .invite-expire-cell {
   display: flex;
   align-items: center;
@@ -578,7 +718,8 @@ useHead({ title: '用户管理' })
 }
 
 @media (max-width: 900px) {
-  .invite-email-row {
+  .invite-email-row,
+  .invite-bulk-row {
     grid-template-columns: 1fr;
     padding-bottom: 10px;
     border-bottom: 1px solid #f1f5f9;

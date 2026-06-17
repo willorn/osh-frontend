@@ -66,10 +66,10 @@
             <h1 class="q-title">{{ question.title || question.content }}</h1>
           </div>
           <div class="q-meta">
-            <span class="meta-user">
+            <UserCard :user-id="question.userId" :username="question.userName" class="meta-user">
               <span class="user-avatar">{{ (question.userName || '?')[0] }}</span>
               {{ question.userName || `用户${question.userId}` }}
-            </span>
+            </UserCard>
             <span v-if="question.resourceNo" class="meta-resource">
               <span class="resource-icon">📚</span>
               [{{ displayResourceType(question.resourceType) || '课程' }}] #{{ question.resourceNo }}
@@ -128,7 +128,7 @@
             </div>
 
             <div class="ans-header">
-              <div class="ans-user-info">
+              <UserCard :user-id="ans.userId" :username="ans.userName" class="ans-user-info">
                 <div class="ans-avatar">{{ (ans.userName || '?')[0] }}</div>
                 <div class="ans-user-detail">
                   <div class="ans-username-row">
@@ -137,7 +137,7 @@
                   </div>
                   <span class="ans-time">{{ ans.createTime }}</span>
                 </div>
-              </div>
+              </UserCard>
               <div class="ans-actions">
                 <button
                   class="btn-vote"
@@ -1017,7 +1017,7 @@ async function doDelete() {
   padding-bottom: 12px;
   border-bottom: 1px solid #f0f0f0;
 }
-.ans-user-info { display: flex; align-items: center; gap: 12px; }
+.ans-user-info { display: flex; align-items: center; gap: 12px; cursor: pointer; }
 .ans-avatar {
   width: 40px;
   height: 40px;

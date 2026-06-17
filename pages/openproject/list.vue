@@ -86,20 +86,19 @@
                         <div v-if="detailData.contributors?.length" class="contributors">
                           <div class="detail-section-title">贡献者</div>
                           <div class="contributor-list">
-                            <a
+                            <UserCard
                               v-for="contributor in detailData.contributors"
                               :key="contributor.id || contributor.githubAccount"
-                              :href="contributor.profileUrl || buildGithubProfileUrl(contributor.githubAccount)"
-                              target="_blank"
-                              rel="noopener noreferrer"
+                              :github-account="contributor.profileUrl || contributor.githubAccount"
+                              :username="contributor.wechatName || contributor.githubAccount"
                               class="contributor"
                             >
                               <n-avatar :size="22" :src="contributor.avatarUrl" />
                               <span>{{ contributor.wechatName || contributor.githubAccount }}</span>
-                              <small class="github-account">@{{ contributor.githubAccount }}</small>
+                              <small class="github-account">{{ contributor.profileUrl || buildGithubProfileUrl(contributor.githubAccount) }}</small>
                               <small>{{ contributor.contributions || 0 }} 次贡献</small>
                               <small>{{ contributor.contributorType === 'primary' ? '主要' : '协同' }}</small>
-                            </a>
+                            </UserCard>
                           </div>
                         </div>
                       </div>
@@ -333,13 +332,8 @@
           <div class="contributor-editor">
             <div v-for="(item, idx) in editForm.contributors" :key="idx" class="contributor-row">
               <n-select v-model:value="item.contributorType" :options="contributorTypeOptions" class="contributor-type" />
-              <n-input
-                v-model:value="item.githubAccount"
-                placeholder="GitHub 账号"
-                @blur="fillContributorByGithub(item)"
-              />
               <n-input v-model:value="item.wechatName" placeholder="微信名/昵称（留空时保存后自动匹配）" />
-              <n-input v-model:value="item.profileUrl" placeholder="GitHub 账号链接" disabled />
+              <n-input v-model:value="item.profileUrl" placeholder="GitHub 账号链接" @blur="fillContributorByGithub(item)" />
               <n-input-number v-model:value="item.contributions" placeholder="贡献次数" class="contribution-count" disabled />
               <n-button text type="error" @click="removeContributor(idx)">删除</n-button>
             </div>
@@ -654,13 +648,14 @@ async function openEditModal(project) {
 }
 
 function toEditableContributor(item) {
+  const profileUrl = item.profileUrl || buildGithubProfileUrl(item.githubAccount)
   return {
-    githubAccount: item.githubAccount || '',
+    githubAccount: normalizeGithubOwner(item.githubAccount || profileUrl),
     wechatName: item.wechatName || '',
     contributorType: item.contributorType === 'primary' ? 'primary' : 'contributor',
     contributions: Number(item.contributions || 0),
     avatarUrl: item.avatarUrl || '',
-    profileUrl: item.profileUrl || buildGithubProfileUrl(item.githubAccount),
+    profileUrl,
     sortOrder: Number(item.sortOrder || 0),
   }
 }
@@ -682,15 +677,17 @@ function removeContributor(index) {
 }
 
 function fillContributorByGithub(item) {
-  if (!item?.githubAccount?.trim()) return
-  if (!item.profileUrl?.trim()) {
-    item.profileUrl = buildGithubProfileUrl(item.githubAccount)
-  }
+  if (!item?.profileUrl?.trim()) return
+  item.profileUrl = buildGithubProfileUrl(item.profileUrl)
+  item.githubAccount = normalizeGithubOwner(item.profileUrl)
 }
 
 function buildGithubProfileUrl(githubAccount) {
-  const account = githubAccount?.trim()
-  return account ? `https://github.com/${account}` : ''
+  const raw = String(githubAccount || '').trim()
+  if (!raw) return ''
+  if (/^https?:\/\/github\.com\//i.test(raw)) return raw
+  if (/^github\.com\//i.test(raw)) return `https://${raw}`
+  return `https://github.com/${normalizeGithubOwner(raw)}`
 }
 
 function toEditableResource(item) {
@@ -824,10 +821,11 @@ async function saveProjectEdit() {
         .filter(r => r.resourceId)
         .map(({ resourceType, resourceId, resourceName, resourceUrl }) => ({ resourceType, resourceId, resourceName, resourceUrl })),
       contributors: editForm.contributors
-        .filter(item => item.githubAccount?.trim())
+        .filter(item => item.profileUrl?.trim() || item.githubAccount?.trim())
         .map((item, idx) => ({
           ...item,
-          profileUrl: item.profileUrl?.trim() || buildGithubProfileUrl(item.githubAccount),
+          githubAccount: normalizeGithubOwner(item.profileUrl || item.githubAccount),
+          profileUrl: buildGithubProfileUrl(item.profileUrl || item.githubAccount),
           sortOrder: idx,
         })),
     })
