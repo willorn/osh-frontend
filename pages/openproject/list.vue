@@ -606,11 +606,40 @@ async function toggleFavorite(item) {
 async function copyGithubLink(url) {
   const link = buildGithubProfileUrl(url)
   if (!link) return
-  try {
-    await navigator.clipboard.writeText(link)
+  if (await copyText(link)) {
     message.success('GitHub 链接已复制')
+    return
+  }
+  message.error('复制失败，请手动复制')
+}
+
+async function copyText(text) {
+  if (!process.client) return false
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(text)
+      return true
+    } catch {
+      // 非安全上下文或浏览器策略拦截时，继续走降级复制。
+    }
+  }
+
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.setAttribute('readonly', '')
+  textarea.style.position = 'fixed'
+  textarea.style.left = '-9999px'
+  textarea.style.top = '0'
+  document.body.appendChild(textarea)
+  textarea.focus()
+  textarea.select()
+  textarea.setSelectionRange(0, textarea.value.length)
+  try {
+    return document.execCommand('copy')
   } catch {
-    message.error('复制失败，请手动复制')
+    return false
+  } finally {
+    document.body.removeChild(textarea)
   }
 }
 
