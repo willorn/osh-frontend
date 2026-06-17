@@ -84,10 +84,10 @@
             <h3 class="q-title">{{ q.title || q.content }}</h3>
           </div>
           <div class="card-meta">
-            <span class="meta-user">
+            <UserCard :user-id="q.userId" :username="q.userName" class="meta-user" @click.stop>
               <span class="user-icon">👤</span>
               {{ q.userName || `用户${q.userId}` }}
-            </span>
+            </UserCard>
             <span v-if="q.resourceNo" class="meta-resource">
               <span class="resource-icon">📚</span>
               [{{ displayResourceType(q.resourceType) || '课程' }}] #{{ q.resourceNo }}

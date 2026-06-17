@@ -77,10 +77,10 @@
                 <n-input :value="user?.email || '未绑定'" disabled />
             </n-form-item>
 
-            <n-form-item label="GitHub账号" path="githubAccount">
+            <n-form-item label="GitHub账号链接" path="githubAccount">
                 <n-input
                     v-model:value="form.githubAccount"
-                    placeholder="请输入 GitHub 账号"
+                    placeholder="请输入 GitHub 账号链接，例如 https://github.com/juege-osh"
                     maxlength="100"
                     show-count
                     clearable
