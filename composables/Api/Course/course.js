@@ -214,6 +214,43 @@ export async function apiAddChapter(body) {
   });
 }
 
+/**
+ * 章/节拖拽排序 POST /pc/course/section/reorder
+ * @param {{courseId:number, items:Array<{id:number,parentId:number,sort:number}>}} body
+ * items 为受影响节点的新 parentId 与 sort，后端在一个事务内更新，只改顺序不动其它字段
+ */
+export async function apiReorderSections(body) {
+  return $fetch('/course/section/reorder', {
+    method: 'POST',
+    baseURL: fetchConfig.baseURL,
+    headers: getAuthHeaders(),
+    body,
+  });
+}
+
+/**
+ * 引入课程作为小节 POST /pc/course/section/courseLink/save
+ * @param {{courseId:number, parentId:number, title:string, sort:number, linkedCourseId:number}} body
+ */
+export async function apiAddCourseLinkSection(body) {
+  return $fetch('/course/section/courseLink/save', {
+    method: 'POST',
+    baseURL: fetchConfig.baseURL,
+    headers: getAuthHeaders(),
+    body,
+  });
+}
+
+/** 课程搜索（引入课程作为章时选课用）POST /pc/course/search */
+export async function apiSearchCourses(body) {
+  return $fetch('/course/search', {
+    method: 'POST',
+    baseURL: fetchConfig.baseURL,
+    headers: getAuthHeaders(),
+    body,
+  });
+}
+
 /** 新增视频小节 POST /pc/course/section/video/save */
 export async function apiAddVideoSection(body) {
   return $fetch('/course/section/video/save', {
@@ -355,6 +392,23 @@ export function apiUploadVideo(file, videoName, sectionId, onProgress) {
     xhr.onabort = () => reject(new Error('视频上传已取消'));
     xhr.send(form);
   });
+}
+
+const ALLOWED_VIDEO_EXTENSIONS = ['mp4', 'avi', 'mov', 'mkv', 'wmv', 'flv', 'webm'];
+
+/** 从视频文件名提取小节标题（去扩展名） */
+export function titleFromVideoFilename(filename) {
+  const name = String(filename || '').trim();
+  if (!name) return '未命名小节';
+  const dot = name.lastIndexOf('.');
+  const base = dot > 0 ? name.slice(0, dot) : name;
+  return base.trim() || '未命名小节';
+}
+
+export function isAllowedVideoFile(file) {
+  if (!file?.name) return false;
+  const ext = file.name.includes('.') ? file.name.split('.').pop().toLowerCase() : '';
+  return ALLOWED_VIDEO_EXTENSIONS.includes(ext);
 }
 
 /** 上传章节视频 POST /pc/course/section/video/upload */

@@ -111,6 +111,15 @@
           {{ detail.content }}
         </div>
 
+        <!-- 反馈图片 -->
+        <div v-if="detail.images && detail.images.length > 0" class="feedback-images">
+          <div class="feedback-images-grid">
+            <div v-for="(img, index) in detail.images" :key="index" class="feedback-image-item">
+              <img :src="getImageUrl(img)" :alt="`反馈图片${index + 1}`" @click="previewImage(detail.images.map(getImageUrl), index)" />
+            </div>
+          </div>
+        </div>
+
         <div v-if="resolutionSourceText" class="resolution-source">
           {{ resolutionSourceText }}
         </div>
@@ -333,7 +342,7 @@
       </n-modal>
 
       <!-- 评论区 -->
-      <div v-if="false && detail.allowComment" ref="commentSectionRef" class="comment-section">
+      <div v-if="false && detail && detail.allowComment" ref="commentSectionRef" class="comment-section">
         <h2 class="comment-title">💬 评论 ({{ detail.commentCount }})</h2>
 
         <!-- 反馈已关闭提示 -->
@@ -352,7 +361,28 @@
             maxlength="500"
             show-count
           />
+
+          <!-- 图片上传区域 -->
+          <div v-if="commentImages.length > 0" class="comment-images-preview">
+            <div v-for="(img, index) in commentImages" :key="index" class="image-preview-item">
+              <img :src="img.preview" alt="预览图" />
+              <button type="button" class="remove-image-btn" @click="removeCommentImage(index)">
+                ✕
+              </button>
+            </div>
+          </div>
+
           <div class="form-actions">
+            <n-upload
+              :custom-request="handleCommentImageUpload"
+              :show-file-list="false"
+              accept="image/*"
+              :disabled="commentImages.length >= 9"
+            >
+              <n-button secondary :disabled="commentImages.length >= 9">
+                📷 上传图片 ({{ commentImages.length }}/9)
+              </n-button>
+            </n-upload>
             <n-button type="primary" @click="handleSubmitComment" :loading="submittingComment">
               发表评论
             </n-button>
@@ -378,6 +408,19 @@
                   <span class="comment-time">{{ formatTime(comment.createTime) }}</span>
                 </div>
                 <div class="comment-content">{{ comment.content }}</div>
+
+                <!-- 评论图片 -->
+                <div v-if="comment.images && comment.images.length > 0" class="comment-images">
+                  <div
+                    v-for="(img, imgIndex) in comment.images"
+                    :key="imgIndex"
+                    class="comment-image-item"
+                    @click="previewImage(comment.images, imgIndex)"
+                  >
+                    <img :src="img" :alt="`图片${imgIndex + 1}`" />
+                  </div>
+                </div>
+
                 <div class="comment-actions">
                   <n-button text size="small" @click="handleReply(comment)">
                     回复
@@ -400,6 +443,19 @@
                     <span class="comment-time">{{ formatTime(reply.createTime) }}</span>
                   </div>
                   <div class="comment-content">{{ reply.content }}</div>
+
+                  <!-- 回复图片 -->
+                  <div v-if="reply.images && reply.images.length > 0" class="comment-images">
+                    <div
+                      v-for="(img, imgIndex) in reply.images"
+                      :key="imgIndex"
+                      class="comment-image-item"
+                      @click="previewImage(reply.images, imgIndex)"
+                    >
+                      <img :src="img" :alt="`图片${imgIndex + 1}`" />
+                    </div>
+                  </div>
+
                   <div class="comment-actions">
                     <n-button text size="small" @click="handleReply(reply, comment.id)">
                       回复
@@ -419,7 +475,28 @@
                 maxlength="500"
                 show-count
               />
+
+              <!-- 回复图片预览区域 -->
+              <div v-if="replyImages.length > 0" class="comment-images-preview">
+                <div v-for="(img, index) in replyImages" :key="index" class="image-preview-item">
+                  <img :src="img.preview" alt="预览图" />
+                  <button type="button" class="remove-image-btn" @click="removeReplyImage(index)">
+                    ✕
+                  </button>
+                </div>
+              </div>
+
               <div class="form-actions">
+                <n-upload
+                  :custom-request="handleReplyImageUpload"
+                  :show-file-list="false"
+                  accept="image/*"
+                  :disabled="replyImages.length >= 9"
+                >
+                  <n-button size="small" secondary :disabled="replyImages.length >= 9">
+                    📷 上传图片 ({{ replyImages.length }}/9)
+                  </n-button>
+                </n-upload>
                 <n-button size="small" type="primary" @click="handleSubmitReply" :loading="submittingReply">
                   发表回复
                 </n-button>
@@ -460,7 +537,7 @@
 import { ref, onMounted, computed, onBeforeUnmount, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
-import { NButton, NInput, NSpin, NEmpty, NBreadcrumb, NBreadcrumbItem, NModal, NTag } from 'naive-ui'
+import { NButton, NInput, NSpin, NEmpty, NBreadcrumb, NBreadcrumbItem, NModal, NTag, NUpload } from 'naive-ui'
 import {
   assertAssistantResponseSuccess,
   apiConfirmFeedbackStatus,
@@ -496,11 +573,13 @@ const loading = ref(true)
 const detail = ref(null)
 const comments = ref([])
 const commentContent = ref('')
+const commentImages = ref([]) // 存储待上传的图片对象 {file: File, preview: string}
 const submittingComment = ref(false)
 const commentLoading = ref(false)
 
 const replyingTo = ref(null)
 const replyContent = ref('')
+const replyImages = ref([]) // 回复的图片
 const replyToUserId = ref(null)
 const replyToUserName = ref('')
 const replyRootId = ref(null)
@@ -1015,8 +1094,8 @@ async function refreshFeedbackAfterComment() {
 }
 
 async function handleSubmitComment() {
-  if (!commentContent.value.trim()) {
-    message.warning('请输入评论内容')
+  if (!commentContent.value.trim() && commentImages.value.length === 0) {
+    message.warning('请输入评论内容或上传图片')
     return
   }
 
@@ -1024,13 +1103,19 @@ async function handleSubmitComment() {
 
   try {
     submittingComment.value = true
+
+    const uploadedImageUrls = await uploadFeedbackImages(commentImages.value)
+
+    // 提交评论（包含已上传的图片URL）
     const res = await apiCreateComment(route.params.id, {
       content: commentContent.value,
+      images: uploadedImageUrls,
       parentId: 0
     })
     assertFeedbackSuccess(res, '评论失败')
     message.success('评论成功')
     commentContent.value = ''
+    commentImages.value = []
     submittingComment.value = false
     await refreshFeedbackAfterComment()
   } catch (error) {
@@ -1040,17 +1125,165 @@ async function handleSubmitComment() {
   }
 }
 
+// 处理评论图片选择（不立即上传）
+async function handleCommentImageUpload({ file }) {
+  if (commentImages.value.length >= 9) {
+    message.warning('最多只能上传9张图片')
+    return
+  }
+
+  // 验证文件大小（3MB）
+  if (file.file.size > 3 * 1024 * 1024) {
+    message.error('图片大小不能超过3MB')
+    return
+  }
+
+  // 验证文件类型
+  if (!file.file.type.startsWith('image/')) {
+    message.error('只能上传图片文件')
+    return
+  }
+
+  try {
+    // 生成预览图（使用FileReader转base64）
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      commentImages.value.push({
+        file: file.file,
+        preview: e.target.result
+      })
+      message.success('图片已添加')
+    }
+    reader.readAsDataURL(file.file)
+  } catch (error) {
+    message.error('图片添加失败')
+  }
+}
+
+// 移除评论图片
+function removeCommentImage(index) {
+  commentImages.value.splice(index, 1)
+}
+
+// 预览图片
+function previewImage(images, startIndex) {
+  // 使用 naive-ui 的图片预览功能
+  const imageGroup = document.createElement('div')
+  imageGroup.style.display = 'none'
+  document.body.appendChild(imageGroup)
+
+  // 创建临时图片元素触发预览
+  const img = document.createElement('img')
+  img.src = images[startIndex]
+  img.onclick = () => {
+    // 这里可以集成第三方图片查看器如 viewerjs
+    window.open(images[startIndex], '_blank')
+  }
+  img.click()
+}
+
+// 获取Token
+function getToken() {
+  if (process.client) {
+    try {
+      const cookieToken = useCookie('token').value
+      if (cookieToken) return cookieToken
+    } catch (e) {
+      // useCookie 可能在某些环境下失败
+    }
+    return localStorage.getItem('token') || localStorage.getItem('Token') || ''
+  }
+  return ''
+}
+
+// 获取正确的上传URL
+function getUploadUrl() {
+  if (process.server) {
+    return 'http://localhost:8081/pc/upload'
+  }
+
+  const hostname = window.location.hostname
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    // 本地开发：通过 Nuxt 代理
+    return '/api/upload'
+  } else {
+    // 生产环境：直接使用后端地址
+    return 'http://43.242.200.25:8081/pc/upload'
+  }
+}
+
+async function uploadFeedbackImages(imageItems) {
+  if (!imageItems.length) {
+    return []
+  }
+
+  message.loading('正在上传图片...', { key: 'uploadImages' })
+  try {
+    return await Promise.all(imageItems.map(uploadSingleFeedbackImage))
+  } finally {
+    message.destroyAll()
+  }
+}
+
+async function uploadSingleFeedbackImage(imageItem, index) {
+  const formData = new FormData()
+  formData.append('file', imageItem.file)
+  formData.append('type', 'image')
+
+  const token = getToken()
+
+  try {
+    const response = await fetch(getUploadUrl(), {
+      method: 'POST',
+      body: formData,
+      headers: {
+        'appid': 'bd9d01ecc75dbbaaefce',
+        ...(token ? {
+          'Authorization': `Bearer ${token}`,
+          'token': token
+        } : {})
+      }
+    })
+
+    const result = await response.json()
+    if (result.code !== 200) {
+      throw new Error(result.msg || '图片上传失败')
+    }
+    if (!result.data?.url) {
+      throw new Error('上传接口未返回图片地址')
+    }
+    return result.data.url
+  } catch (error) {
+    message.error(`第 ${index + 1} 张图片上传失败: ${error.message}`)
+    throw error
+  }
+}
+
+// 处理图片URL
+// 后端已将图片路径转换为可访问的临时URL，直接返回即可
+function getImageUrl(url) {
+  if (!url) return ''
+  console.log('[图片URL]', url)
+  return url
+}
+
+// ==================== 评论功能代码（未使用） ====================
+// 注意：当前项目不需要评论功能，相关代码保留但不会渲染（v-if="false"）
+// 这些代码可以在将来需要时启用，当前不占用运行资源
+// ================================================================
+
 function handleReply(comment, rootId = null) {
   replyingTo.value = rootId || comment.id
   replyToUserId.value = comment.userId
   replyToUserName.value = getCommentUserName(comment)
   replyRootId.value = rootId || comment.id
   replyContent.value = ''
+  replyImages.value = []
 }
 
 async function handleSubmitReply() {
-  if (!replyContent.value.trim()) {
-    message.warning('请输入回复内容')
+  if (!replyContent.value.trim() && replyImages.value.length === 0) {
+    message.warning('请输入回复内容或上传图片')
     return
   }
 
@@ -1058,8 +1291,12 @@ async function handleSubmitReply() {
 
   try {
     submittingReply.value = true
+
+    const uploadedImageUrls = await uploadFeedbackImages(replyImages.value)
+
     const res = await apiCreateComment(route.params.id, {
       content: replyContent.value,
+      images: uploadedImageUrls,
       parentId: replyingTo.value,
       replyToUserId: replyToUserId.value,
       replyToUserName: replyToUserName.value
@@ -1079,9 +1316,50 @@ async function handleSubmitReply() {
 function cancelReply() {
   replyingTo.value = null
   replyContent.value = ''
+  replyImages.value = []
   replyToUserId.value = null
   replyToUserName.value = ''
   replyRootId.value = null
+}
+
+// 处理回复图片选择（不立即上传）
+async function handleReplyImageUpload({ file }) {
+  if (replyImages.value.length >= 9) {
+    message.warning('最多只能上传9张图片')
+    return
+  }
+
+  // 验证文件大小（3MB）
+  if (file.file.size > 3 * 1024 * 1024) {
+    message.error('图片大小不能超过3MB')
+    return
+  }
+
+  // 验证文件类型
+  if (!file.file.type.startsWith('image/')) {
+    message.error('只能上传图片文件')
+    return
+  }
+
+  try {
+    // 生成预览图（使用FileReader转base64）
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      replyImages.value.push({
+        file: file.file,
+        preview: e.target.result
+      })
+      message.success('图片已添加')
+    }
+    reader.readAsDataURL(file.file)
+  } catch (error) {
+    message.error('图片添加失败')
+  }
+}
+
+// 移除回复图片
+function removeReplyImage(index) {
+  replyImages.value.splice(index, 1)
 }
 
 async function loadMoreComments() {
@@ -1518,6 +1796,42 @@ function formatTime(time) {
   color: #374151;
   white-space: pre-wrap;
   margin-bottom: 20px;
+}
+
+/* 反馈图片样式 */
+.feedback-images {
+  margin-bottom: 20px;
+}
+
+.feedback-images-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.feedback-image-item {
+  position: relative;
+  width: 100%;
+  padding-bottom: 100%; /* 1:1 宽高比 */
+  border-radius: 8px;
+  overflow: hidden;
+  background: #f3f4f6;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.feedback-image-item:hover {
+  transform: scale(1.02);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.feedback-image-item img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .resolution-source {
@@ -2285,6 +2599,51 @@ function formatTime(time) {
   margin-bottom: 32px;
 }
 
+/* 评论图片预览区 */
+.comment-images-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.image-preview-item {
+  position: relative;
+  width: 100px;
+  height: 100px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+}
+
+.image-preview-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.remove-image-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  transition: background 0.2s;
+}
+
+.remove-image-btn:hover {
+  background: rgba(239, 68, 68, 0.9);
+}
+
 .form-actions {
   display: flex;
   gap: 12px;
@@ -2375,6 +2734,40 @@ function formatTime(time) {
   color: #333;
   margin-bottom: 8px;
   white-space: pre-wrap;
+}
+
+/* 评论图片展示 */
+.comment-images {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+  margin-bottom: 8px;
+}
+
+.comment-image-item {
+  position: relative;
+  width: 100%;
+  padding-bottom: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  border: 1px solid #e5e7eb;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.comment-image-item:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.comment-image-item img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .comment-actions {
@@ -2686,6 +3079,12 @@ function formatTime(time) {
 
   .detail-title {
     font-size: 22px;
+  }
+
+  /* 移动端图片网格 */
+  .feedback-images-grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 8px;
   }
 
   .detail-header {

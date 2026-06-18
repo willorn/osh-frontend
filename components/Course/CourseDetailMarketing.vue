@@ -7,13 +7,37 @@
       </div>
       <div class="info-box">
         <h1 class="course-title">{{ data.title }}</h1>
-        <p class="course-desc">{{ data.intro || data.desc || '暂无介绍' }}</p>
+        <n-tooltip
+          trigger="hover"
+          placement="bottom-start"
+          :disabled="!isIntroTruncated"
+          :style="{ maxWidth: '520px' }"
+        >
+          <template #trigger>
+            <p
+              ref="descRef"
+              class="course-desc"
+              :class="{ 'course-desc--truncated': isIntroTruncated }"
+            >{{ courseIntro }}</p>
+          </template>
+          <div class="course-desc-tooltip">{{ courseIntro }}</div>
+        </n-tooltip>
         <div class="meta-row">
           <span class="meta-item">约 {{ data.buyCount || 0 }} 人学习</span>
           <span class="meta-sep">·</span>
           <span class="meta-item price-text">
             {{ Number(data.price) > 0 ? '¥' + data.price : '免费' }}
           </span>
+          <template v-if="difficultyMeta">
+            <span class="meta-sep">·</span>
+            <span
+              class="difficulty-chip"
+              :class="`difficulty-${difficultyMeta.tone}`"
+            >
+              <span class="difficulty-icon">{{ difficultyMeta.icon }}</span>
+              {{ difficultyMeta.label }}
+            </span>
+          </template>
           <template v-if="canUpdate">
             <span class="meta-sep">·</span>
             <span class="meta-item status-chip" :class="`status-${courseStatusTone}`">
@@ -58,13 +82,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
-import { NButton, NIcon } from 'naive-ui';
+import { NButton, NIcon, NTooltip } from 'naive-ui';
 import { CreateOutline } from '@vicons/ionicons5';
 import CourseOutlineManager from '~/components/Course/edit/CourseOutlineManager.vue';
 import CourseEditModal from '~/components/Course/CourseEditModal.vue';
 import { apiGetMaterialUrl, apiGetCourseMaterials } from '~/composables/Api/Course/course';
+import { courseDifficultyMeta } from '~/composables/courseDifficulty';
 import { fetchConfig } from '~/composables/useHttp';
 
 const { permissionList } = usePermission();
@@ -89,6 +114,23 @@ const isPaid = computed(() =>
   props.isPaid || props.data?.buyFlag === 1 || props.data?.accessLevel === 'FULL',
 );
 const editMode = ref(false);
+const descRef = ref<HTMLElement | null>(null);
+const isIntroTruncated = ref(false);
+const courseIntro = computed(() => props.data?.intro || props.data?.desc || '暂无介绍');
+
+function checkIntroTruncated() {
+  const el = descRef.value;
+  if (!el || courseIntro.value === '暂无介绍') {
+    isIntroTruncated.value = false;
+    return;
+  }
+  isIntroTruncated.value = el.scrollHeight > el.clientHeight + 1;
+}
+
+let descResizeObserver: ResizeObserver | null = null;
+
+watch(courseIntro, () => nextTick(checkIntroTruncated));
+
 const courseStatusCode = computed(() => Number(props.data?.status));
 const courseStatusText = computed(() => COURSE_STATUS_TEXT_MAP[courseStatusCode.value] || `状态${props.data?.status ?? '-'}`);
 const courseStatusTone = computed(() => {
@@ -97,6 +139,7 @@ const courseStatusTone = computed(() => {
   if (courseStatusCode.value === 7) return 'pending';
   return 'pending';
 });
+const difficultyMeta = computed(() => courseDifficultyMeta(props.data?.difficulty));
 
 // 本地课程数据副本，编辑后更新
 const localData = ref<any>({ ...props.data });
@@ -109,6 +152,18 @@ const courseMaterials = ref<any[]>([]);
 
 onMounted(() => {
   coverUrl.value = props.data?.cover || '';
+  nextTick(() => {
+    checkIntroTruncated();
+    if (typeof ResizeObserver !== 'undefined' && descRef.value) {
+      descResizeObserver = new ResizeObserver(() => checkIntroTruncated());
+      descResizeObserver.observe(descRef.value);
+    }
+  });
+});
+
+onUnmounted(() => {
+  descResizeObserver?.disconnect();
+  descResizeObserver = null;
 });
 
 // props.data.cover 变化时（保存后父组件刷新数据）直接更新
@@ -258,6 +313,7 @@ async function openEditBasic() {
     tPrice: props.data?.tPrice || props.data?.t_price || 0,
     type: props.data?.type || 'media',
     resourceType: props.data?.resourceType || 'FREE',
+    difficulty: props.data?.difficulty ?? 1,
     materials,
   };
   showEditBasic.value = true;
@@ -300,7 +356,25 @@ function onEditSuccess() {
   gap: 10px;
 }
 .course-title { font-size: 22px; font-weight: 700; margin: 0; color: #1a1a1a; }
-.course-desc { font-size: 14px; color: #666; margin: 0; line-height: 1.6; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.course-desc {
+  font-size: 14px;
+  color: #666;
+  margin: 0;
+  line-height: 1.6;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  cursor: default;
+}
+.course-desc--truncated {
+  cursor: help;
+}
+.course-desc-tooltip {
+  white-space: pre-wrap;
+  line-height: 1.6;
+  max-width: 520px;
+}
 .meta-row { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #888; }
 .meta-sep { color: #ddd; }
 .price-text { color: #18a058; font-weight: 600; }
@@ -315,6 +389,19 @@ function onEditSuccess() {
 .status-pending { background: #fff7e6; color: #d48806; }
 .status-pass { background: #f6ffed; color: #389e0d; }
 .status-reject { background: #fff1f0; color: #cf1322; }
+.difficulty-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.difficulty-icon { font-size: 11px; line-height: 1; }
+.difficulty-beginner { color: #166534; background: #dcfce7; }
+.difficulty-intermediate { color: #b45309; background: #fef3c7; }
+.difficulty-advanced { color: #6d28d9; background: #ede9fe; }
 .btn-row { display: flex; align-items: center; margin-top: 8px; }
 
 /* 资料下载 */

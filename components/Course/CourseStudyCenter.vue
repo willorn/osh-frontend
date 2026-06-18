@@ -38,6 +38,13 @@
               <p class="placeholder-tip">{{ currentSection.title ? '视频加载中...' : '请从右侧选择章节开始学习' }}</p>
             </div>
           </div>
+          <div v-if="currentVideoUrl" class="player-key-hints">
+            <span>空格 / K 播放暂停</span>
+            <span class="hint-sep">·</span>
+            <span>← → ±5 秒</span>
+            <span class="hint-sep">·</span>
+            <span>J / L ±10 秒</span>
+          </div>
         </div>
 
         <!-- 视频信息栏 -->
@@ -141,7 +148,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, nextTick } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { fetchConfig } from '~/composables/useHttp';
 import { getAuthHeaders, apiGetVideoUrls, normalizeSectionFreeFlag } from '~/composables/Api/Course/course';
@@ -184,6 +191,71 @@ const currentVideoUrl = ref('');
 const videoEl = ref(null);
 const docPanelRef = ref(null);
 const renderedDocContent = ref('');
+
+const VIDEO_SEEK_SHORT_SEC = 5;
+const VIDEO_SEEK_LONG_SEC = 10;
+
+function isEditableTarget(target) {
+  if (!target || !(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+  if (target.isContentEditable) return true;
+  return !!target.closest('[contenteditable="true"]');
+}
+
+function toggleVideoPlayPause() {
+  const video = videoEl.value;
+  if (!video || !currentVideoUrl.value) return;
+  if (video.paused) {
+    video.play().catch(() => {});
+  } else {
+    video.pause();
+  }
+}
+
+function seekVideo(deltaSec) {
+  const video = videoEl.value;
+  if (!video || !currentVideoUrl.value) return;
+  const duration = Number.isFinite(video.duration) ? video.duration : Infinity;
+  const nextTime = Math.max(0, Math.min(duration, video.currentTime + deltaSec));
+  video.currentTime = nextTime;
+}
+
+function onVideoKeydown(event) {
+  if (isEditableTarget(event.target)) return;
+  if (!currentVideoUrl.value) return;
+
+  const { key } = event;
+  if (key === ' ' || key === 'Spacebar') {
+    event.preventDefault();
+    toggleVideoPlayPause();
+    return;
+  }
+  if (key === 'k' || key === 'K') {
+    event.preventDefault();
+    toggleVideoPlayPause();
+    return;
+  }
+  if (key === 'ArrowLeft') {
+    event.preventDefault();
+    seekVideo(-VIDEO_SEEK_SHORT_SEC);
+    return;
+  }
+  if (key === 'ArrowRight') {
+    event.preventDefault();
+    seekVideo(VIDEO_SEEK_SHORT_SEC);
+    return;
+  }
+  if (key === 'j' || key === 'J') {
+    event.preventDefault();
+    seekVideo(-VIDEO_SEEK_LONG_SEC);
+    return;
+  }
+  if (key === 'l' || key === 'L') {
+    event.preventDefault();
+    seekVideo(VIDEO_SEEK_LONG_SEC);
+  }
+}
 
 // 渲染文档内容并刷新其中的图片临时 URL（照搬编辑器的 resolveImgUrls 逻辑）
 async function renderAndRefreshDoc(textContent) {
@@ -433,7 +505,18 @@ function fmtDuration(sec) {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-onMounted(loadOutline);
+onMounted(() => {
+  loadOutline();
+  if (process.client) {
+    window.addEventListener('keydown', onVideoKeydown);
+  }
+});
+
+onUnmounted(() => {
+  if (process.client) {
+    window.removeEventListener('keydown', onVideoKeydown);
+  }
+});
 </script>
 
 <style scoped>
@@ -500,6 +583,7 @@ onMounted(loadOutline);
 .video-col::-webkit-scrollbar { display: none; }
 
 .player-box {
+  position: relative;
   background: #000;
   width: min(100%, 1340px);
   aspect-ratio: 16/9;
@@ -509,6 +593,35 @@ onMounted(loadOutline);
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 28px 70px rgba(0, 0, 0, 0.42);
+}
+.player-key-hints {
+  position: absolute;
+  left: 14px;
+  bottom: 52px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 11px;
+  line-height: 1;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  backdrop-filter: blur(8px);
+}
+.player-box:hover .player-key-hints,
+.player-box:focus-within .player-key-hints {
+  opacity: 1;
+  transform: translateY(0);
+}
+.player-key-hints .hint-sep {
+  color: rgba(255, 255, 255, 0.35);
 }
 .video-el {
   width: 100%;

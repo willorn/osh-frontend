@@ -11,8 +11,16 @@
     </div>
     
 
-    <div class="card-cover">
+      <div class="card-cover">
       <img :src="item.cover || 'https://07akioni.oss-cn-beijing.aliyuncs.com/07akioni.jpeg'" />
+      <span
+        v-if="difficultyMeta"
+        class="difficulty-badge"
+        :class="`difficulty-${difficultyMeta.tone}`"
+      >
+        <span class="difficulty-icon">{{ difficultyMeta.icon }}</span>
+        <span class="difficulty-text">{{ difficultyMeta.label }}</span>
+      </span>
       <span
         v-if="showAuditStatus"
         class="audit-status-badge"
@@ -66,6 +74,7 @@
 import { computed } from 'vue';
 import { NIcon } from 'naive-ui';
 import { Heart, HeartOutline } from '@vicons/ionicons5';
+import { courseDifficultyMeta } from '~/composables/courseDifficulty';
 // CourseCard 组件：展示课程卡片信息
 
 const props = defineProps({
@@ -117,6 +126,8 @@ const displayTags = computed(() => {
     .filter(Boolean)
     .slice(0, 2);
 });
+
+const difficultyMeta = computed(() => courseDifficultyMeta(props.item?.difficulty));
 
 const handleFavorite = () => emit('favorite', props.item.id);
 
@@ -178,6 +189,43 @@ const handleCardClick = () => {
   overflow: hidden;
 }
 .card-cover img { width: 100%; height: 100%; object-fit: cover; }
+.difficulty-badge {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: calc(100% - 44px);
+  padding: 3px 8px 3px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.2px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+}
+.difficulty-icon { font-size: 11px; line-height: 1; flex-shrink: 0; }
+.difficulty-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.difficulty-beginner {
+  color: #166534;
+  background: rgba(220, 252, 231, 0.92);
+}
+.difficulty-intermediate {
+  color: #b45309;
+  background: rgba(254, 243, 199, 0.92);
+}
+.difficulty-advanced {
+  color: #6d28d9;
+  background: rgba(237, 233, 254, 0.92);
+}
 .audit-status-badge {
   position: absolute;
   top: 8px;
