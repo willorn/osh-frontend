@@ -40,6 +40,9 @@ export const apiGetOpenProjectDetail = (id) =>
 export const apiEditOpenProject = (data) =>
   opFetch(`${BASE}/edit`, { method: 'POST', body: data })
 
+export const apiTransferOpenProjectLeader = (data) =>
+  opFetch(`${BASE}/leader/transfer`, { method: 'POST', body: data })
+
 export const apiFavoriteOpenProject = (projectId) =>
   opFetch(`${BASE}/favorite`, { method: 'POST', params: { projectId } })
 
