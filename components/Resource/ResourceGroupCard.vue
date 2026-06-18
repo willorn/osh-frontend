@@ -565,8 +565,9 @@ async function handleEditCustomUpload({ file, onFinish, onError }) {
     try {
         isUploading.value = true
         const formData = new FormData()
+        formData.append('resourceId', resourceFormData.value.id)  // 传入资源ID，关联上传文件
         formData.append('file', file.file)
-        
+
         const { data } = await useResourceUploadApi(formData)
         
         if (data.value && data.value.filePath) {
