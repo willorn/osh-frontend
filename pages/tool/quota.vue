@@ -41,13 +41,13 @@
         </div>
         <div class="quota-card-price">
           <span class="quota-card-cash">¥{{ formatAmount(item.cashAmount) }}</span>
-          <span v-if="Number(item.payType) === 3 && Number(item.pointAmount || 0) > 0" class="quota-card-point">
+          <span v-if="supportsPointsPay(item) && Number(item.pointAmount || 0) > 0" class="quota-card-point">
             + {{ item.pointAmount }} 积分
           </span>
         </div>
         <div class="quota-card-meta">
           <span>排序 {{ item.sortOrder || 0 }}</span>
-          <span>支付类型 {{ Number(item.payType) === 3 ? '现金+积分' : '纯现金' }}</span>
+          <span>支付类型 {{ payTypeText(item.payType) }}</span>
         </div>
         <div class="quota-card-actions">
           <button
@@ -80,23 +80,40 @@
         <div class="pay-package-title">{{ selectedPackage.packageName }}</div>
         <div class="pay-package-points">+{{ selectedPackage.useCount }} 工具点数</div>
 
+        <div class="pay-user-points">
+          当前剩余积分
+          <strong>{{ currentQuota.remainingPoints }}</strong>
+        </div>
+
         <div class="pay-methods">
           <button
+            v-if="supportsPointsPay(selectedPackage)"
             class="pay-method-btn"
-            :class="{ active: selectedChannel === 'wxpay' }"
+            :class="{ active: selectedPaymentMethod === 'points', disabled: !canUsePointsPay(selectedPackage) }"
+            :disabled="!!payOrderNo || !canUsePointsPay(selectedPackage)"
+            type="button"
+            @click="handleSelectPaymentMethod('points')"
+          >
+            <span>{{ canUsePointsPay(selectedPackage) ? '积分支付' : '积分不足' }}</span>
+          </button>
+          <button
+            v-if="supportsCashPay(selectedPackage)"
+            class="pay-method-btn"
+            :class="{ active: selectedPaymentMethod === 'wxpay' }"
             :disabled="!!payOrderNo"
             type="button"
-            @click="selectedChannel = 'wxpay'"
+            @click="handleSelectPaymentMethod('wxpay')"
           >
             <img class="pay-method-icon" src="~/assets/images/payment/wechat-pay.svg" alt="微信支付">
             <span>微信支付</span>
           </button>
           <button
+            v-if="supportsCashPay(selectedPackage)"
             class="pay-method-btn"
-            :class="{ active: selectedChannel === 'alipay' }"
+            :class="{ active: selectedPaymentMethod === 'alipay' }"
             :disabled="!!payOrderNo"
             type="button"
-            @click="selectedChannel = 'alipay'"
+            @click="handleSelectPaymentMethod('alipay')"
           >
             <img class="pay-method-icon" src="~/assets/images/payment/alipay-pay.svg" alt="支付宝">
             <span>支付宝</span>
@@ -104,9 +121,20 @@
         </div>
 
         <div class="pay-summary-card">
-          <div class="pay-summary-row"><span>现金金额</span><strong>¥{{ formatAmount(selectedPackage.cashAmount) }}</strong></div>
-          <div v-if="Number(selectedPackage.payType) === 3" class="pay-summary-row">
-            <span>积分金额</span><strong>{{ selectedPackage.pointAmount || 0 }} 积分</strong>
+          <div v-if="selectedPaymentMethod !== 'points'" class="pay-summary-row">
+            <span>应付金额</span><strong>¥{{ formatAmount(selectedPackage.cashAmount) }}</strong>
+          </div>
+          <div v-else class="pay-summary-row">
+            <span>消耗积分</span><strong>{{ selectedPackage.pointAmount || 0 }} 积分</strong>
+          </div>
+          <div v-if="supportsPointsPay(selectedPackage) && selectedPaymentMethod !== 'points'" class="pay-summary-row">
+            <span>积分价格</span><strong>{{ selectedPackage.pointAmount || 0 }} 积分</strong>
+          </div>
+          <div v-if="selectedPaymentMethod === 'points'" class="pay-summary-row">
+            <span>支付后剩余</span><strong>{{ remainingPointsAfterPay(selectedPackage) }} 积分</strong>
+          </div>
+          <div v-if="supportsPointsPay(selectedPackage) && !canUsePointsPay(selectedPackage)" class="pay-summary-row pay-summary-row-danger">
+            <span>积分状态</span><strong>积分不足，还差 {{ missingPoints(selectedPackage) }} 积分</strong>
           </div>
           <div v-if="payOrderNo && payStatus !== '1'" class="pay-summary-row">
             <span>剩余支付时间</span><strong>{{ payCountdownText }}</strong>
@@ -116,9 +144,9 @@
           </div>
         </div>
 
-        <div v-if="payQrcodeImage" class="pay-qrcode-panel">
+        <div v-if="payQrcodeImage && payStatus !== '1'" class="pay-qrcode-panel">
           <img :src="payQrcodeImage" alt="支付二维码" class="pay-qrcode-image">
-          <p class="pay-qrcode-tip">请使用{{ selectedChannel === 'alipay' ? '支付宝' : '微信' }}扫码完成支付</p>
+          <p class="pay-qrcode-tip">请使用{{ selectedPaymentMethod === 'alipay' ? '支付宝' : '微信' }}扫码完成支付</p>
         </div>
 
         <div class="pay-tips">
@@ -137,12 +165,16 @@
             关闭订单
           </n-button>
           <n-button
+            v-if="payStatus !== '1'"
             type="primary"
             :loading="paySubmitting"
-            :disabled="!!payOrderNo"
+            :disabled="!!payOrderNo || (selectedPaymentMethod === 'points' && !canUsePointsPay(selectedPackage))"
             @click="handleBuy(selectedPackage)"
           >
-            生成支付二维码
+            {{ selectedPaymentMethod === 'points' ? '确认积分支付' : '生成支付二维码' }}
+          </n-button>
+          <n-button v-else type="primary" disabled>
+            支付成功
           </n-button>
         </n-space>
       </template>
@@ -164,7 +196,12 @@
           <n-input-number v-model:value="editForm.useCount" :min="1" placeholder="购买后增加的工具点数" />
         </n-form-item>
         <n-form-item label="现金金额">
-          <n-input-number v-model:value="editForm.price" :min="0.01" placeholder="请输入现金金额">
+          <n-input-number
+            v-model:value="editForm.price"
+            :min="0.01"
+            placeholder="请输入现金金额"
+            @blur="handlePriceBlur"
+          >
             <template #prefix>￥</template>
           </n-input-number>
         </n-form-item>
@@ -172,7 +209,7 @@
           <n-select v-model:value="editForm.payType" :options="payTypeOptions" />
         </n-form-item>
         <n-form-item v-if="Number(editForm.payType) === 3" label="积分金额">
-          <n-input-number :value="autoPointCost" :show-button="false" readonly />
+          <n-input-number :value="displayPointCost" :show-button="false" readonly />
         </n-form-item>
         <n-form-item label="状态">
           <n-select v-model:value="editForm.status" :options="statusOptions" />
@@ -214,12 +251,13 @@ const quotaLoading = ref(false)
 const paySubmitting = ref(false)
 const selectedPackageId = ref(null)
 const selectedPackage = ref(null)
-const selectedChannel = ref('wxpay')
+const selectedPaymentMethod = ref('wxpay')
 const saveSubmitting = ref(false)
 const showEditModal = ref(false)
 const editingPackage = ref(null)
 const showPayModal = ref(false)
 const cancelPayLoading = ref(false)
+const displayPointCost = ref(0)
 let payPollingTimer = null
 let payCountdownTimer = null
 const payOrderNo = ref('')
@@ -236,6 +274,7 @@ const currentQuota = reactive({
   remainingCount: 0,
   totalBuyCount: 0,
   usedCount: 0,
+  remainingPoints: 0,
 })
 
 const editForm = reactive({
@@ -249,22 +288,15 @@ const editForm = reactive({
 })
 
 const payTypeOptions = [
-  { label: '纯现金', value: 1 },
-  { label: '现金/积分', value: 3 },
+  { label: '仅现金', value: 1 },
+  { label: '仅积分', value: 2 },
+  { label: '现金或积分', value: 3 },
 ]
 
 const statusOptions = [
   { label: '启用', value: 1 },
   { label: '停用', value: 0 },
 ]
-
-const autoPointCost = computed(() => {
-  if (Number(editForm.payType) !== 3) {
-    return 0
-  }
-  const price = Number(editForm.price || 0)
-  return Math.round(price * 10)
-})
 
 const formatAmount = (value) => Number(value || 0).toFixed(2)
 const payCountdownText = computed(() => {
@@ -297,6 +329,7 @@ const loadQuota = async () => {
     currentQuota.remainingCount = Number(data.remainingCount || 0)
     currentQuota.totalBuyCount = Number(data.totalBuyCount || 0)
     currentQuota.usedCount = Number(data.usedCount || 0)
+    currentQuota.remainingPoints = Number(data.remainingPoints || 0)
   } finally {
     quotaLoading.value = false
   }
@@ -314,7 +347,7 @@ const loadPackages = async () => {
 
 const openPayModal = (item) => {
   selectedPackage.value = item
-  selectedChannel.value = 'wxpay'
+  selectedPaymentMethod.value = defaultPaymentMethod(item)
   resetPayState()
   showPayModal.value = true
 }
@@ -326,7 +359,7 @@ const handleBuy = async (item) => {
     const res = await apiCreateToolPurchaseOrder({
       packageId: item.packageId,
       payType: item.payType,
-      channel: selectedChannel.value,
+      paymentMethod: selectedPaymentMethod.value,
     })
     const data = res?.data || {}
     const paymentInfo = data.payment || {}
@@ -336,13 +369,21 @@ const handleBuy = async (item) => {
     payPaymentNo.value = data.paymentNo || ''
     payRawCode.value = qrcode || payUrl
     payStatus.value = data.payStatus || '0'
+    if (payStatus.value === '1') {
+      stopQuotaPayPolling()
+      stopQuotaPayCountdown()
+      await loadQuota()
+      await loadPackages()
+      message.success(selectedPaymentMethod.value === 'points' ? '积分支付成功，工具点数已到账' : '支付成功，工具点数已到账')
+      return
+    }
     await buildQuotaPayQrcode()
     startQuotaPayPolling(payOrderNo.value)
     startQuotaPayCountdown(data.expireTime, data.closeExpireMinutes)
     if (payUrl) {
       window.open(payUrl, '_blank')
     }
-    message.success('订单已创建，请完成支付')
+    message.success(selectedPaymentMethod.value === 'points' ? '积分支付成功，工具点数已到账' : '订单已创建，请完成支付')
   } catch (e) {
     message.error(e?.data?.msg || e?.message || '创建订单失败')
   } finally {
@@ -474,6 +515,10 @@ const handleClosePayModal = async () => {
     await cancelCurrentQuotaPayment(true)
     return
   }
+  if (payStatus.value === '1') {
+    await loadQuota()
+    await loadPackages()
+  }
   showPayModal.value = false
   resetPayState()
 }
@@ -487,12 +532,49 @@ const openEditModal = (item) => {
   editForm.payType = item?.payType ?? 1
   editForm.status = item?.status ?? 1
   editForm.sortOrder = item?.sortOrder ?? 0
+  displayPointCost.value = Number(item?.pointAmount || 0)
   showEditModal.value = true
 }
 
 const closeEditModal = () => {
   showEditModal.value = false
   editingPackage.value = null
+  displayPointCost.value = 0
+}
+
+const resolvePointCostByPrice = (price) => {
+  if (Number(editForm.payType) !== 3) {
+    return 0
+  }
+  return Math.round(Number(price || 0) * 10)
+}
+
+const handlePriceBlur = () => {
+  displayPointCost.value = resolvePointCostByPrice(editForm.price)
+}
+
+const supportsPointsPay = (item) => [2, 3].includes(Number(item?.payType))
+const supportsCashPay = (item) => [1, 3].includes(Number(item?.payType))
+const payTypeText = (payType) => {
+  const value = Number(payType)
+  if (value === 2) return '仅积分'
+  if (value === 3) return '现金或积分'
+  return '仅现金'
+}
+const canUsePointsPay = (item) => Number(currentQuota.remainingPoints || 0) >= Number(item?.pointAmount || 0)
+const missingPoints = (item) => Math.max(0, Number(item?.pointAmount || 0) - Number(currentQuota.remainingPoints || 0))
+const remainingPointsAfterPay = (item) => Math.max(0, Number(currentQuota.remainingPoints || 0) - Number(item?.pointAmount || 0))
+const defaultPaymentMethod = (item) => {
+  if (supportsPointsPay(item) && canUsePointsPay(item)) {
+    return 'points'
+  }
+  return 'wxpay'
+}
+const handleSelectPaymentMethod = (method) => {
+  if (method === 'points' && selectedPackage.value && !canUsePointsPay(selectedPackage.value)) {
+    return
+  }
+  selectedPaymentMethod.value = method
 }
 
 const handleSavePackage = async () => {
