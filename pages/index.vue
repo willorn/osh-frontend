@@ -1,59 +1,14 @@
 <template>
   <div class="home-page">
 
-    <!-- 公告栏 -->
-    <section class="notice-section">
-      <div class="notice-bar">
-        <div class="notice-label">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path d="M8 1l1.8 3.6L14 5.6l-3 2.9.7 4.1L8 10.5l-3.7 2.1.7-4.1-3-2.9 4.2-.6z" stroke="white" stroke-width="1.3" stroke-linejoin="round" fill="rgba(255,255,255,0.2)"/>
-          </svg>
-          <span>公告</span>
-        </div>
-        <div class="notice-scroll-wrap">
-          <div
-            class="notice-scroll-track"
-            :style="{ animationPlayState: noticePaused ? 'paused' : 'running' }"
-            @mouseenter="noticePaused = true"
-            @mouseleave="noticePaused = false"
-          >
-            <span class="notice-item" v-for="(n, i) in (noticesFromApi.length ? [...noticesFromApi, ...noticesFromApi] : [...notices, ...notices])" :key="i">
-              <span class="notice-dot" :style="{ background: n.color }"></span>
-              {{ n.text }}
-              <span class="notice-sep">｜</span>
-            </span>
-          </div>
-        </div>
-      </div>
-      <div class="notice-bar notice-bar-2">
-        <div class="notice-label notice-label-2">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path d="M2 4h12M2 8h12M2 12h8" stroke="white" stroke-width="1.3" stroke-linecap="round"/>
-          </svg>
-          <span>动态</span>
-        </div>
-        <div class="notice-scroll-wrap">
-          <div
-            class="notice-scroll-track"
-            :style="{ animationPlayState: noticePaused2 ? 'paused' : 'running' }"
-            @mouseenter="noticePaused2 = true"
-            @mouseleave="noticePaused2 = false"
-          >
-            <span class="notice-item" v-for="(n, i) in (dynamicsFromApi.length ? [...dynamicsFromApi, ...dynamicsFromApi] : [...notices2, ...notices2])" :key="'n2-'+i">
-              <span class="notice-dot" :style="{ background: n.color }"></span>
-              {{ n.text }}
-              <span class="notice-sep">｜</span>
-            </span>
-          </div>
-        </div>
-      </div>
-    </section>
+    <!-- 新的公告栏组件 -->
+    <HomepageAnnouncementBoard v-bind="homepageAnnouncementBoardProps" />
 
     <!-- Hero Banner - 2x2 Grid Carousel -->
     <section class="hero-section" @mouseenter="pauseCarousel" @mouseleave="resumeCarousel">
 
       <!-- 管理员编辑入口按钮 -->
-      <button v-if="isAdmin" class="carousel-edit-btn" @click="openBannerEditor">
+      <button v-if="canEditCarousel" class="carousel-edit-btn" @click="openBannerEditor">
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
           <path d="M10.5 1.5l2 2-8 8H2.5v-2l8-8z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
@@ -77,7 +32,7 @@
               :key="idx"
               class="carousel-grid-card"
               :style="{ background: item.cardBg }"
-              @click="navigateTo(item.path)"
+              @click="navigateTo(resolveCarouselPath(item))"
             >
               <!-- 卡片装饰 -->
               <div class="grid-card-deco"></div>
@@ -88,7 +43,7 @@
                 </div>
                 <h3 class="grid-card-title">{{ item.title }}</h3>
                 <p class="grid-card-sub">{{ item.subtitle }}</p>
-                <button class="grid-card-btn" @click.stop="navigateTo(item.path)">
+                <button class="grid-card-btn" @click.stop="navigateTo(resolveCarouselPath(item))">
                   {{ item.btnText }}
                   <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
                     <path d="M4 7h6M7 4l3 3-3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -171,7 +126,9 @@
                   <div class="banner-editor-entry-title">{{ item.title || '未设置标题' }}</div>
                   <div class="banner-editor-entry-sub">{{ item.subtitle || '点击编辑详情' }}</div>
                   <div class="banner-editor-entry-meta">
-                    <span class="banner-editor-entry-path">{{ item.path }}</span>
+                    <span class="banner-editor-entry-path">
+                      {{ item.moduleKey ? `${getModuleOptionName(item.moduleKey)} · ${resolveCarouselPath(item)}` : resolveCarouselPath(item) }}
+                    </span>
                     <span class="banner-editor-entry-hint">点击编辑 →</span>
                   </div>
                 </div>
@@ -191,146 +148,357 @@
         </div>
       </div>
 
-      <!-- 单个卡片详细编辑弹窗 -->
+      <!-- 单个卡片详细编辑弹窗 - 扁平化精美UI -->
       <div v-if="showCardDetail" class="banner-editor-overlay" @click.self="showCardDetail = false">
-        <div class="card-detail-modal">
-          <div class="card-detail-header">
-            <h3>编辑卡片 #{{ editingCardIndex + 1 }}</h3>
-            <button class="banner-editor-close" @click="showCardDetail = false">✕</button>
+        <div class="card-detail-modal card-detail-modal-flat">
+          <div class="card-detail-header card-detail-header-flat">
+            <h3>✏️ 编辑卡片 #{{ editingCardIndex + 1 }}</h3>
+            <button class="banner-editor-close banner-editor-close-flat" @click="showCardDetail = false">✕</button>
           </div>
-          <div class="card-detail-body" v-if="editingCard">
-            <div class="card-detail-preview" :style="{ background: editingCard.cardBg }">
-              <div class="card-detail-preview-icon" :style="{ background: editingCard.iconBg }">
-                <span>{{ editingCard.emoji }}</span>
+          <div class="card-detail-body card-detail-body-flat" v-if="editingCard">
+            <!-- 预览卡片 -->
+            <div class="card-detail-preview card-detail-preview-flat" :style="{ background: editingCard.cardBg }">
+              <div class="card-detail-preview-left">
+                <div class="card-detail-preview-icon" :style="{ background: editingCard.iconBg }">
+                  <span>{{ editingCard.emoji }}</span>
+                </div>
+                <div class="card-detail-preview-text">
+                  <div class="card-detail-preview-title">{{ editingCard.title || '标题' }}</div>
+                  <div class="card-detail-preview-sub">{{ editingCard.subtitle || '副标题' }}</div>
+                </div>
+                <button class="grid-card-btn card-detail-preview-cta" type="button">
+                  {{ editingCard.btnText || '立即查看' }}
+                  <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+                    <path d="M4 7h6M7 4l3 3-3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </button>
               </div>
-              <div class="card-detail-preview-text">
-                <div class="card-detail-preview-title">{{ editingCard.title || '标题' }}</div>
-                <div class="card-detail-preview-sub">{{ editingCard.subtitle || '副标题' }}</div>
+              <!-- 右侧功能标签展示 -->
+              <div class="card-detail-preview-right" v-if="editingCard.feature1 || editingCard.feature2 || editingCard.feature3">
+                <div class="preview-feature-tag" v-if="editingCard.feature1">
+                  <span class="preview-feature-icon">{{ editingCard.feature1Icon || '🏷️' }}</span>
+                  <span class="preview-feature-text">{{ editingCard.feature1 }}</span>
+                </div>
+                <div class="preview-feature-tag" v-if="editingCard.feature2">
+                  <span class="preview-feature-icon">{{ editingCard.feature2Icon || '🎯' }}</span>
+                  <span class="preview-feature-text">{{ editingCard.feature2 }}</span>
+                </div>
+                <div class="preview-feature-tag" v-if="editingCard.feature3">
+                  <span class="preview-feature-icon">{{ editingCard.feature3Icon || '📊' }}</span>
+                  <span class="preview-feature-text">{{ editingCard.feature3 }}</span>
+                </div>
               </div>
             </div>
+            
             <div class="card-detail-form">
-              <div class="card-detail-field">
-                <label>标题</label>
-                <input v-model="editingCard.title" class="card-detail-input" placeholder="卡片标题" />
-              </div>
-              <div class="card-detail-field">
-                <label>副标题</label>
-                <input v-model="editingCard.subtitle" class="card-detail-input" placeholder="副标题描述" />
-              </div>
-              <div class="card-detail-row">
+              <!-- 模块和路径移到顶部 -->
+              <div class="card-detail-section">
+                <div class="card-detail-section-title">📍 模块配置</div>
                 <div class="card-detail-field">
-                  <label>图标 Emoji</label>
-                  <div class="card-detail-picker">
-                    <div class="picker-selected">
-                      <input v-model="editingCard.emoji" class="card-detail-input" placeholder="⚡" maxlength="2" />
+                  <label>模块</label>
+                  <select
+                    :value="editingCard.moduleKey"
+                    class="card-detail-input card-detail-input-flat card-detail-select"
+                    @change="handleModuleChange($event.target.value)"
+                  >
+                    <option value="">请选择模块</option>
+                    <option v-for="module in carouselModuleOptions" :key="module.key" :value="module.key">
+                      {{ module.name }}
+                    </option>
+                  </select>
+                </div>
+                <div class="card-detail-field card-detail-field-subtitle">
+                  <label>跳转路径</label>
+                  <input
+                    :value="resolveCarouselPath(editingCard)"
+                    class="card-detail-input card-detail-input-flat"
+                    readonly
+                    placeholder="选择模块后自动回填"
+                  />
+                </div>
+                <p class="card-detail-helper">
+                  💡 {{ editingCard.moduleKey ? `当前模块：${getModuleOptionName(editingCard.moduleKey)} → ${resolveCarouselPath(editingCard)}` : '请先选择模块，路径将自动生成' }}
+                </p>
+              </div>
+              
+              <!-- 基础信息 -->
+              <div class="card-detail-section">
+                <div class="card-detail-section-title">📝 基础信息</div>
+                <div class="card-detail-row card-detail-row-basic">
+                  <div class="card-detail-field">
+                    <label>标题</label>
+                    <input v-model="editingCard.title" class="card-detail-input card-detail-input-flat" placeholder="卡片标题" />
+                  </div>
+                  <div class="card-detail-field">
+                    <label>按钮文字</label>
+                    <input v-model="editingCard.btnText" class="card-detail-input card-detail-input-flat" placeholder="立即抢购" />
+                  </div>
+                </div>
+                <div class="card-detail-field card-detail-field-subtitle">
+                  <label>副标题</label>
+                  <textarea v-model="editingCard.subtitle" class="card-detail-input card-detail-input-flat card-detail-textarea" rows="2" placeholder="副标题描述"></textarea>
+                </div>
+              </div>
+              
+              <!-- Emoji和颜色选择 -->
+              <div class="card-detail-section">
+                <div class="card-detail-section-title">🎨 视觉样式</div>
+                <div class="card-detail-emoji-module" :style="{ '--emoji-accent': editingCard.iconBg }">
+                  <div class="card-detail-field card-detail-field-emoji-input">
+                    <label>图标 Emoji</label>
+                    <div class="card-detail-emoji-preview-card" :style="{ background: editingCard.iconBg }">
+                      <span>{{ editingCard.emoji || '⚡' }}</span>
                     </div>
-                    <div class="picker-options emoji-options">
+                  </div>
+                  <div class="card-detail-field card-detail-field-emoji-grid">
+                    <label>快速选择 ({{ emojiPresets.length }}个图标)</label>
+                    <div class="emoji-grid-40">
                       <span
                         v-for="e in emojiPresets"
                         :key="e"
-                        class="picker-option-item emoji-item"
+                        class="emoji-grid-item"
                         :class="{ active: editingCard.emoji === e }"
                         @click="editingCard.emoji = e"
+                        :title="e"
                       >{{ e }}</span>
                     </div>
                   </div>
+                  <div class="card-detail-color-top card-detail-color-top-embedded">
+                    <div class="card-detail-color-copy">
+                      <label>图标背景色</label>
+                      <p class="card-detail-color-desc">控制图标区域底色，突出模块识别。</p>
+                    </div>
+                    <div class="card-detail-field card-detail-color-input-side">
+                      <label class="card-detail-color-side-label">RGB颜色选择</label>
+                      <div class="color-picker-row">
+                        <input 
+                          type="color" 
+                          :value="extractFirstColor(editingCard.iconBg)" 
+                          @input="editingCard.iconBg = $event.target.value"
+                          class="color-picker-native" 
+                          title="选择颜色"
+                        />
+                        <input 
+                          v-model="editingCard.iconBg" 
+                          type="text" 
+                          class="card-detail-input card-detail-input-flat color-input-text" 
+                          placeholder="选择颜色" 
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div class="card-detail-color-panel card-detail-color-panel-expanded card-detail-color-panel-embedded">
+                    <div class="color-preset-grid">
+                      <div
+                        v-for="(g, gi) in iconBgPresets"
+                        :key="gi"
+                        class="color-preset-item"
+                        :class="{ active: editingCard.iconBg === g.value }"
+                        :style="{ background: g.value }"
+                        @click="editingCard.iconBg = g.value"
+                        :title="g.name"
+                      >
+                        <span class="color-preset-check" v-if="editingCard.iconBg === g.value">✓</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div class="card-detail-field">
-                  <label>按钮文字</label>
-                  <input v-model="editingCard.btnText" class="card-detail-input" placeholder="立即抢购" />
+                
+                <!-- RGB颜色选择器 - 卡片背景色 -->
+                <div class="card-detail-color-block">
+                  <div class="card-detail-color-top">
+                    <div class="card-detail-color-copy">
+                      <label>卡片背景色</label>
+                      <p class="card-detail-color-desc">控制卡片主背景，统一整张卡片氛围。</p>
+                    </div>
+                    <div class="card-detail-field card-detail-color-input-side">
+                      <div class="color-picker-row">
+                        <input 
+                          type="color" 
+                          :value="extractFirstColor(editingCard.cardBg)" 
+                          @input="editingCard.cardBg = $event.target.value"
+                          class="color-picker-native" 
+                          title="选择颜色"
+                        />
+                        <input 
+                          v-model="editingCard.cardBg" 
+                          type="text" 
+                          class="card-detail-input card-detail-input-flat color-input-text" 
+                          placeholder="选择颜色" 
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div class="card-detail-color-panel card-detail-color-panel-expanded">
+                    <div class="color-preset-grid">
+                      <div
+                        v-for="(g, gi) in cardBgPresets"
+                        :key="gi"
+                        class="color-preset-item"
+                        :class="{ active: editingCard.cardBg === g.value }"
+                        :style="{ background: g.value }"
+                        @click="editingCard.cardBg = g.value"
+                        :title="g.name"
+                      >
+                        <span class="color-preset-check" v-if="editingCard.cardBg === g.value">✓</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div class="card-detail-field">
-                <label>跳转路径</label>
-                <input v-model="editingCard.path" class="card-detail-input" placeholder="/list/flashsale/1" />
+              
+              <!-- 功能标签 -->
+              <div class="card-detail-section">
+                <div class="card-detail-section-title">🏷️ 功能标签</div>
+                <p class="feature-desc">为卡片添加最多3个功能标签，标签会显示在卡片右侧</p>
+                <div class="card-detail-row card-detail-row-features-modern">
+                  <div class="card-detail-field">
+                    <label>功能标签 1</label>
+                    <div class="feature-input-row-modern">
+                      <input
+                        :value="editingCard.feature1Icon"
+                        class="card-detail-input card-detail-input-flat feature-icon-input-modern"
+                        placeholder="🏷️"
+                        @input="updateFeatureIcon('feature1Icon', $event.target.value)"
+                        maxlength="2"
+                      />
+                      <input 
+                        v-model="editingCard.feature1" 
+                        class="card-detail-input card-detail-input-flat feature-text-input-modern" 
+                        placeholder="限时特惠" 
+                      />
+                    </div>
+                    <div class="feature-emoji-grid">
+                      <span
+                        v-for="e in getVisiblePickerItems(featureIconPresets, 'feature1', 30)"
+                        :key="'f1'+e"
+                        class="feature-emoji-item"
+                        :class="{
+                          active: editingCard.feature1Icon === e,
+                          disabled: isFeatureIconDisabled('feature1Icon', e)
+                        }"
+                        @click="selectFeatureIcon('feature1Icon', e)"
+                        :title="e"
+                      >{{ e }}</span>
+                    </div>
+                    <button
+                      v-if="featureIconPresets.length > 30"
+                      type="button"
+                      class="picker-expand-btn-modern picker-expand-btn-sm"
+                      @click="togglePickerExpand('feature1')"
+                    >
+                      <span class="expand-btn-icon-sm">{{ isPickerExpanded('feature1') ? '🔼' : '🔽' }}</span>
+                      <span class="expand-btn-text-sm">{{ isPickerExpanded('feature1') ? '收起' : '更多' }}</span>
+                    </button>
+                  </div>
+                  <div class="card-detail-field">
+                    <label>功能标签 2</label>
+                    <div class="feature-input-row-modern">
+                      <input
+                        :value="editingCard.feature2Icon"
+                        class="card-detail-input card-detail-input-flat feature-icon-input-modern"
+                        placeholder="🎯"
+                        @input="updateFeatureIcon('feature2Icon', $event.target.value)"
+                        maxlength="2"
+                      />
+                      <input 
+                        v-model="editingCard.feature2" 
+                        class="card-detail-input card-detail-input-flat feature-text-input-modern" 
+                        placeholder="低至1折" 
+                      />
+                    </div>
+                    <div class="feature-emoji-grid">
+                      <span
+                        v-for="e in getVisiblePickerItems(featureIconPresets, 'feature2', 30)"
+                        :key="'f2'+e"
+                        class="feature-emoji-item"
+                        :class="{
+                          active: editingCard.feature2Icon === e,
+                          disabled: isFeatureIconDisabled('feature2Icon', e)
+                        }"
+                        @click="selectFeatureIcon('feature2Icon', e)"
+                        :title="e"
+                      >{{ e }}</span>
+                    </div>
+                    <button
+                      v-if="featureIconPresets.length > 30"
+                      type="button"
+                      class="picker-expand-btn-modern picker-expand-btn-sm"
+                      @click="togglePickerExpand('feature2')"
+                    >
+                      <span class="expand-btn-icon-sm">{{ isPickerExpanded('feature2') ? '🔼' : '🔽' }}</span>
+                      <span class="expand-btn-text-sm">{{ isPickerExpanded('feature2') ? '收起' : '更多' }}</span>
+                    </button>
+                  </div>
+                  <div class="card-detail-field">
+                    <label>功能标签 3</label>
+                    <div class="feature-input-row-modern">
+                      <input
+                        :value="editingCard.feature3Icon"
+                        class="card-detail-input card-detail-input-flat feature-icon-input-modern"
+                        placeholder="📊"
+                        @input="updateFeatureIcon('feature3Icon', $event.target.value)"
+                        maxlength="2"
+                      />
+                      <input 
+                        v-model="editingCard.feature3" 
+                        class="card-detail-input card-detail-input-flat feature-text-input-modern" 
+                        placeholder="每日更新" 
+                      />
+                    </div>
+                    <div class="feature-emoji-grid">
+                      <span
+                        v-for="e in getVisiblePickerItems(featureIconPresets, 'feature3', 30)"
+                        :key="'f3'+e"
+                        class="feature-emoji-item"
+                        :class="{
+                          active: editingCard.feature3Icon === e,
+                          disabled: isFeatureIconDisabled('feature3Icon', e)
+                        }"
+                        @click="selectFeatureIcon('feature3Icon', e)"
+                        :title="e"
+                      >{{ e }}</span>
+                    </div>
+                    <button
+                      v-if="featureIconPresets.length > 30"
+                      type="button"
+                      class="picker-expand-btn-modern picker-expand-btn-sm"
+                      @click="togglePickerExpand('feature3')"
+                    >
+                      <span class="expand-btn-icon-sm">{{ isPickerExpanded('feature3') ? '🔼' : '🔽' }}</span>
+                      <span class="expand-btn-text-sm">{{ isPickerExpanded('feature3') ? '收起' : '更多' }}</span>
+                    </button>
+                  </div>
+                </div>
+                <p class="feature-icon-hint-modern">💡 三个功能标签共用 Emoji 图标池，已被其它标签使用的图标会自动置灰。</p>
               </div>
-              <div class="card-detail-field">
-                <label>图标背景色</label>
-                <div class="picker-options gradient-options">
-                  <div
-                    v-for="(g, gi) in iconBgPresets"
-                    :key="gi"
-                    class="picker-option-item gradient-item"
-                    :class="{ active: editingCard.iconBg === g.value }"
-                    :style="{ background: g.value }"
-                    @click="editingCard.iconBg = g.value"
-                  >
-                    <span class="gradient-label">{{ g.name }}</span>
+              
+              <!-- 其他设置 -->
+              <div class="card-detail-section">
+                <div class="card-detail-section-title">⚙️ 其他设置</div>
+                <div class="card-detail-row">
+                  <div class="card-detail-field">
+                    <label>排序</label>
+                    <input v-model.number="editingCard.sort" class="card-detail-input card-detail-input-flat" type="number" min="1" :max="visibleCarouselItems.length || 1" placeholder="1" />
                   </div>
-                </div>
-                <input v-model="editingCard.iconBg" class="card-detail-input" placeholder="linear-gradient(135deg, #ef4444, #f97316)" style="margin-top:8px" />
-              </div>
-              <div class="card-detail-field">
-                <label>卡片背景色</label>
-                <div class="picker-options gradient-options">
-                  <div
-                    v-for="(g, gi) in cardBgPresets"
-                    :key="gi"
-                    class="picker-option-item gradient-item"
-                    :class="{ active: editingCard.cardBg === g.value }"
-                    :style="{ background: g.value }"
-                    @click="editingCard.cardBg = g.value"
-                  >
-                    <span class="gradient-label">{{ g.name }}</span>
+                  <div class="card-detail-field">
+                    <label>是否显示</label>
+                    <button
+                      class="card-detail-visibility-btn visibility-btn-flat"
+                      :class="editingCard.isVisible !== false ? 'visibility-btn-on' : 'visibility-btn-off'"
+                      @click="toggleCardDetailVisibility"
+                    >
+                      <span class="visibility-btn-icon">{{ editingCard.isVisible !== false ? '👁️' : '🚫' }}</span>
+                      <span class="visibility-btn-text">{{ editingCard.isVisible !== false ? '显示中' : '已隐藏' }}</span>
+                    </button>
                   </div>
-                </div>
-                <input v-model="editingCard.cardBg" class="card-detail-input" placeholder="linear-gradient(135deg, #1e1b4b, #4c1d95)" style="margin-top:8px" />
-              </div>
-              <div class="card-detail-row">
-                <div class="card-detail-field">
-                  <label>功能标签1</label>
-                  <div class="feature-input-row">
-                    <input v-model="editingCard.feature1Icon" class="card-detail-input feature-icon-input" placeholder="📋" maxlength="2" />
-                    <input v-model="editingCard.feature1" class="card-detail-input" placeholder="限时特惠" />
-                  </div>
-                  <div class="picker-options emoji-options feature-emoji-picker">
-                    <span v-for="e in featureIconPresets" :key="'f1'+e" class="picker-option-item emoji-item emoji-item-sm" :class="{ active: editingCard.feature1Icon === e }" @click="editingCard.feature1Icon = e">{{ e }}</span>
-                  </div>
-                </div>
-                <div class="card-detail-field">
-                  <label>功能标签2</label>
-                  <div class="feature-input-row">
-                    <input v-model="editingCard.feature2Icon" class="card-detail-input feature-icon-input" placeholder="🎯" maxlength="2" />
-                    <input v-model="editingCard.feature2" class="card-detail-input" placeholder="低至1折" />
-                  </div>
-                  <div class="picker-options emoji-options feature-emoji-picker">
-                    <span v-for="e in featureIconPresets" :key="'f2'+e" class="picker-option-item emoji-item emoji-item-sm" :class="{ active: editingCard.feature2Icon === e }" @click="editingCard.feature2Icon = e">{{ e }}</span>
-                  </div>
-                </div>
-                <div class="card-detail-field">
-                  <label>功能标签3</label>
-                  <div class="feature-input-row">
-                    <input v-model="editingCard.feature3Icon" class="card-detail-input feature-icon-input" placeholder="📊" maxlength="2" />
-                    <input v-model="editingCard.feature3" class="card-detail-input" placeholder="每日更新" />
-                  </div>
-                  <div class="picker-options emoji-options feature-emoji-picker">
-                    <span v-for="e in featureIconPresets" :key="'f3'+e" class="picker-option-item emoji-item emoji-item-sm" :class="{ active: editingCard.feature3Icon === e }" @click="editingCard.feature3Icon = e">{{ e }}</span>
-                  </div>
-                </div>
-              </div>
-              <div class="card-detail-row">
-                <div class="card-detail-field">
-                  <label>排序</label>
-                  <input v-model.number="editingCard.sort" class="card-detail-input" type="number" min="1" :max="visibleCarouselItems.length || 1" placeholder="1" />
-                </div>
-                <div class="card-detail-field">
-                  <label>是否显示</label>
-                  <button
-                    class="card-detail-visibility-btn"
-                    :class="editingCard.isVisible !== false ? 'visibility-btn-on' : 'visibility-btn-off'"
-                    @click="toggleCardDetailVisibility"
-                  >
-                    <span class="visibility-btn-icon">{{ editingCard.isVisible !== false ? '👁️' : '🚫' }}</span>
-                    <span class="visibility-btn-text">{{ editingCard.isVisible !== false ? '当前：显示中' : '当前：已隐藏' }}</span>
-                    <span class="visibility-btn-hint">点击切换</span>
-                  </button>
                 </div>
               </div>
             </div>
           </div>
-          <div class="card-detail-footer">
-            <button class="banner-editor-cancel" @click="showCardDetail = false">关闭</button>
-            <button class="banner-editor-save" @click="saveCardDetail">确认</button>
+          <div class="card-detail-footer card-detail-footer-flat">
+            <button class="banner-editor-cancel banner-editor-cancel-flat" @click="showCardDetail = false">取消</button>
+            <button class="banner-editor-save banner-editor-save-flat" @click="saveCardDetail">✓ 保存修改</button>
           </div>
         </div>
       </div>
@@ -409,101 +577,57 @@
     <section class="pricing-section">
       <div class="section-container">
         <div class="features-header">
-          <h2 class="section-title" style="color:#1e1b4b">选择适合你的套餐</h2>
-          <p class="section-subtitle">不同档次满足不同学习需求，随时升级，终身受益</p>
+          <h2 class="section-title" style="color:#1e1b4b">选择套餐</h2>
+          <p class="section-subtitle">VIP 支持月付或年付，小班用户仅支持年付。</p>
         </div>
 
-        <div class="pricing-horizontal">
+        <div class="pricing-top-row member-plan-row">
+          <div
+            v-for="plan in memberModePlans"
+            :key="plan.id"
+            class="pricing-card member-plan-card"
+            :class="[
+              plan.featured ? 'member-plan-card-featured' : '',
+              plan.tone === 'small-class' ? 'pricing-class-card member-plan-card-class' : ''
+            ]"
+          >
+            <div class="member-plan-topline">
+              <span class="member-plan-type">{{ plan.memberType }}</span>
+              <span class="member-plan-period">{{ plan.period }}</span>
+            </div>
 
-          <!-- 觉哥就业小班（上面） -->
-          <div class="pricing-h-card pricing-h-class">
-            <div class="ph-top-row">
-              <div class="ph-left">
-                <div class="ph-badge">⭐ 强烈推荐</div>
-                <h3 class="ph-title">觉哥就业小班</h3>
-                <p class="ph-sub">就业培训 · 面试指导 · 专人专属规划</p>
-                <div class="ph-price">
-                  <span class="ph-price-num">¥2199</span>
-                  <span class="ph-price-unit">起 / 永久</span>
-                </div>
-              </div>
-              <div class="ph-middle">
-                <div class="ph-highlights">
-                  <div class="ph-expand-step" v-for="(step, i) in classTechPath" :key="'t'+i">
-                    <span class="ph-expand-step-num">{{ i + 1 }}</span>
-                    <span class="ph-expand-step-title">{{ step.title }}</span>
-                    <span class="ph-expand-step-desc">{{ step.desc }}</span>
-                  </div>
-                </div>
-              </div>
-              <div class="ph-right">
-                <ul class="ph-feat-list">
-                  <li v-for="(f, i) in classFeatures" :key="i">
-                    <span class="ph-check">✓</span>{{ f }}
-                  </li>
-                </ul>
-                <button class="ph-btn ph-btn-class" @click="navigateTo('/course/1')">立即报名小班 →</button>
+            <div class="member-plan-title-row">
+              <h3 class="member-plan-title">{{ plan.name }}</h3>
+              <span v-if="plan.badge" class="member-plan-badge">{{ plan.badge }}</span>
+            </div>
+
+            <p class="member-plan-desc">{{ plan.description }}</p>
+
+            <div class="member-plan-benefits">
+              <div v-for="benefit in plan.benefits" :key="benefit.title" class="member-plan-benefit">
+                <strong>{{ benefit.title }}</strong>
+                <span>{{ benefit.description }}</span>
               </div>
             </div>
-            <!-- 右上角可展开按钮 -->
-            <button class="ph-expand-btn" @click="classExpanded = !classExpanded">
-              {{ classExpanded ? '收起' : '了解更多' }}
-              <svg :class="{ 'ph-expand-icon-open': classExpanded }" class="ph-expand-icon" width="12" height="12" viewBox="0 0 12 12" fill="none">
-                <path d="M3 5l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
+
+            <div class="member-plan-price-row">
+              <div class="member-plan-price-main">
+                <strong>{{ plan.price }}</strong>
+                <span>{{ plan.priceSuffix }}</span>
+              </div>
+              <del v-if="plan.originalPrice">{{ plan.originalPrice }}</del>
+            </div>
+
+            <small class="member-plan-unit-price">{{ plan.unitPrice }}</small>
+
+            <button
+              class="pricing-btn"
+              :class="plan.featured ? 'pricing-btn-featured' : ''"
+              @click="navigateTo('/user/member')"
+            >
+              {{ plan.buttonText }}
             </button>
-            <!-- 展开内容 -->
-            <div v-if="classExpanded" class="ph-expand-panel">
-              <div class="ph-expand-grid">
-                <div class="ph-expand-block">
-                  <h4 class="ph-expand-block-title">👥 学员情况</h4>
-                  <div class="ph-expand-item" v-for="(s, i) in classStudents" :key="'s'+i">
-                    <span class="ph-expand-dot"></span>
-                    <span>{{ s }}</span>
-                  </div>
-                </div>
-                <div class="ph-expand-block">
-                  <h4 class="ph-expand-block-title">🎯 服务亮点</h4>
-                  <div class="ph-hl" v-for="(h, i) in classHighlights" :key="'h'+i">
-                    <span class="ph-hl-icon">{{ h.icon }}</span>
-                    <div>
-                      <div class="ph-hl-title">{{ h.title }}</div>
-                      <div class="ph-hl-desc">{{ h.desc }}</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
-
-          <!-- VIP 会员（下面） -->
-          <div class="pricing-h-card pricing-h-vip">
-            <div class="ph-left">
-              <div class="ph-icon-vip">👑</div>
-              <h3 class="ph-title">VIP 会员</h3>
-              <p class="ph-sub">全站畅学，尊享特权</p>
-              <div class="ph-price">
-                <span class="ph-price-num">¥188</span>
-                <span class="ph-price-unit">/ 年</span>
-              </div>
-            </div>
-            <div class="ph-middle ph-middle-vip">
-              <div class="ph-vip-intro">
-                <p class="ph-vip-slogan">🚀 一次开通，全年畅学无忧</p>
-                <p class="ph-vip-desc">解锁全站 1000+ 付费课程、VIP 专属直播课、专属题库全解锁、优先答疑通道、学习进度云同步，随时随地高效学习。</p>
-                <p class="ph-vip-tip">💡 支持随时升级觉哥就业小班</p>
-              </div>
-            </div>
-            <div class="ph-right">
-              <ul class="ph-feat-list">
-                <li v-for="(feat, j) in vipFeatures" :key="'r'+j">
-                  <span class="ph-check">✓</span>{{ feat }}
-                </li>
-              </ul>
-              <button class="ph-btn ph-btn-vip" @click="navigateTo('/course/1')">立即开通 VIP</button>
-            </div>
-          </div>
-
         </div>
       </div>
     </section>
@@ -1055,6 +1179,11 @@
 <script setup>
 import { h, ref, computed, onMounted, onUnmounted } from 'vue'
 import { fetchConfig } from '~/composables/useHttp'
+import { apiGetHomepageMemberPlans, apiGetMemberPlans } from '~/composables/member'
+import HomepageAnnouncementBoard from '~/components/Homepage/AnnouncementBoard.vue'
+import { buildAnnouncementRefreshKey } from '~/composables/useWebSocket'
+
+const { announcementRefreshFlags } = useWebSocket()
 
 useHead({
   title: '开源助手',
@@ -1073,6 +1202,8 @@ const defaultCarouselItems = [
     emoji: '⚡',
     iconBg: 'linear-gradient(135deg, #ef4444, #f97316)',
     cardBg: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4c1d95 100%)',
+    styleType: 'module',
+    moduleKey: 'seckill',
     title: '限时秒杀课程',
     subtitle: '热门课程限时低价，错过恢复原价',
     btnText: '立即抢购',
@@ -1090,6 +1221,8 @@ const defaultCarouselItems = [
     emoji: '👥',
     iconBg: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
     cardBg: 'linear-gradient(135deg, #1e3a5f 0%, #1d4ed8 50%, #2563eb 100%)',
+    styleType: 'module',
+    moduleKey: 'group',
     title: '拼团优惠学习',
     subtitle: '邀请好友一起学，享受更低价格',
     btnText: '发起拼团',
@@ -1107,6 +1240,8 @@ const defaultCarouselItems = [
     emoji: '🚀',
     iconBg: 'linear-gradient(135deg, #8b5cf6, #ec4899)',
     cardBg: 'linear-gradient(135deg, #3b0764 0%, #7e22ce 50%, #a21caf 100%)',
+    styleType: 'module',
+    moduleKey: 'openproject',
     title: '精选开源项目',
     subtitle: '真实项目案例，边学边练提升实战能力',
     btnText: '查看项目',
@@ -1124,6 +1259,8 @@ const defaultCarouselItems = [
     emoji: '🌐',
     iconBg: 'linear-gradient(135deg, #14b8a6, #06b6d4)',
     cardBg: 'linear-gradient(135deg, #134e4a 0%, #0f766e 50%, #0891b2 100%)',
+    styleType: 'module',
+    moduleKey: 'usefull',
     title: '实用网站导航',
     subtitle: '程序员常用工具站点，一站式收藏',
     btnText: '立即查看',
@@ -1149,16 +1286,7 @@ async function loadCarouselData() {
       },
     })
     if (res && res.data && res.data.length > 0) {
-      // 后端返回的数据转换为前端格式
-      carouselItems.value = res.data.map(item => ({
-        ...item,
-        isVisible: item.isVisible === 1 || item.isVisible === true,
-        tags: [
-          { icon: item.feature1Icon || '✨', text: item.feature1 || '' },
-          { icon: item.feature2Icon || '✨', text: item.feature2 || '' },
-          { icon: item.feature3Icon || '✨', text: item.feature3 || '' },
-        ].filter(t => t.text),
-      }))
+      carouselItems.value = res.data.map(item => normalizeCarouselItem(item))
     } else {
       carouselItems.value = defaultCarouselItems
     }
@@ -1170,6 +1298,7 @@ async function loadCarouselData() {
 
 const ITEMS_PER_PAGE = 4
 const carouselPageIndex = ref(0)
+const tokenCookie = useCookie('token')
 
 const visibleCarouselItems = computed(() => carouselItems.value.filter(item => item.isVisible !== false))
 const totalPages = computed(() => Math.ceil(visibleCarouselItems.value.length / ITEMS_PER_PAGE))
@@ -1179,11 +1308,62 @@ const currentPageItems = computed(() => {
   return visibleCarouselItems.value.slice(start, start + ITEMS_PER_PAGE)
 })
 
-// 管理员判断（TODO: 上线前恢复权限判断）
-const isAdmin = computed(() => {
+const carouselModuleOptions = computed(() => {
+  const mapEntries = Object.entries(navModuleMap.value || {})
+  return mapEntries.map(([key, frontPath]) => ({
+    key,
+    name: moduleDisplayNameMap[key] || key,
+    frontPath,
+  }))
+})
+
+function getModuleOptionName(key) {
+  return moduleDisplayNameMap[key] || key || '未配置模块'
+}
+
+function normalizeCarouselItem(item = {}) {
+  const normalized = {
+    ...item,
+    styleType: 'module',
+    moduleKey: item.moduleKey || inferModuleKeyFromPath(item.path),
+    isVisible: item.isVisible === 1 || item.isVisible === true,
+  }
+  normalized.path = normalized.moduleKey ? (navModuleMap.value[normalized.moduleKey] || normalized.path || '') : (normalized.path || '')
+  normalized.tags = buildCarouselTags(normalized)
+  return normalized
+}
+
+function buildCarouselTags(item = {}) {
+  return [
+    { icon: item.feature1Icon || '✨', text: item.feature1 || '' },
+    { icon: item.feature2Icon || '✨', text: item.feature2 || '' },
+    { icon: item.feature3Icon || '✨', text: item.feature3 || '' },
+  ].filter(tag => tag.text)
+}
+
+function inferModuleKeyFromPath(path = '') {
+  if (!path) return ''
+  const matched = carouselModuleOptions.value.find(module => module.frontPath === path)
+  return matched?.key || ''
+}
+
+function resolveCarouselPath(item = {}) {
+  if (item.moduleKey && navModuleMap.value[item.moduleKey]) {
+    return navModuleMap.value[item.moduleKey]
+  }
+  return item.path || '/'
+}
+
+const hasCarouselEditSession = computed(() => {
+  return Boolean(tokenCookie.value)
+})
+
+// 管理员判断：必须真实登录且具备轮播图编辑权限
+const canEditCarousel = computed(() => {
   try {
+    const user = useUser()
     const { hasPermission } = usePermission()
-    return hasPermission('homepage:carousel:edit')
+    return hasCarouselEditSession.value && Boolean(user.value) && hasPermission('homepage:carousel:edit')
   } catch (e) {
     return false
   }
@@ -1213,6 +1393,7 @@ const visibilityTargetVisible = ref(false)
 // 保存确认弹窗
 const showSaveConfirm = ref(false)
 const saveChanges = ref({ added: [], removed: [], edited: [], visibilityChanged: [], reordered: false })
+const expandedPickers = ref({})
 
 // 保存初始快照用于对比变更
 const originalCarouselSnapshot = ref([])
@@ -1231,6 +1412,8 @@ function snapshotCarousel() {
     cardBg: item.cardBg || '',
     btnText: item.btnText || '',
     path: item.path || '',
+    styleType: item.styleType || 'module',
+    moduleKey: item.moduleKey || '',
     feature1: item.feature1 || '',
     feature1Icon: item.feature1Icon || '',
     feature2: item.feature2 || '',
@@ -1243,9 +1426,29 @@ function snapshotCarousel() {
 
 const originalCarouselCount = ref(0)
 const editingCard = ref(null)
+const moduleDisplayNameMap = {
+  course: '课程模块',
+  book: '电子书模块',
+  exam: '考试模块',
+  qa: '答疑模块',
+  seckill: '秒杀模块',
+  group: '拼团模块',
+  openproject: '开源项目模块',
+  usefull: '实用网站模块',
+  info_gap: '信息差模块',
+  tool: '工具模块',
+  feedback: '反馈模块',
+  member: '会员模块',
+  rpa: 'RPA模块',
+}
 
 // ===== 预设选项 =====
-const emojiPresets = ['⚡', '👥', '🚀', '🌐', '📝', '💬', '🔧', '📡', '📚', '🎯', '🏆', '💡', '🎨', '🔥', '⭐', '🎁', '🛠️', '📊', '🤖', '🎓']
+const emojiPresets = [
+  '⚡', '👥', '🚀', '🌐', '📝', '💬', '🔧', '📡', '📚', '🎯',
+  '🏆', '💡', '🎨', '🔥', '⭐', '🎁', '🛠️', '📊', '🤖', '🎓',
+  '🧠', '🧩', '📈', '🧪', '🛰️', '🎬', '💼', '🪄', '💻', '📱',
+  '🔔', '🎪', '🎨', '🌈', '🔥', '❤️', '🌟', '🎸', '🎤', '🎧'
+]
 
 const featureIconPresets = [
   '🕐', '💰', '🔄', '👋', '🏷️', '🎁', '📦', '✏️', '⭐', '📌',
@@ -1278,6 +1481,10 @@ const iconBgPresets = [
   { name: '靛青', value: 'linear-gradient(135deg, #4f46e5, #0ea5e9)' },
   { name: '金色', value: 'linear-gradient(135deg, #d97706, #b45309)' },
   { name: '翠绿', value: 'linear-gradient(135deg, #059669, #0d9488)' },
+  { name: 'RPA蓝', value: 'linear-gradient(135deg, #0f6fff, #00c2ff)' },
+  { name: 'RPA青', value: 'linear-gradient(135deg, #0a7c86, #15b8a6)' },
+  { name: '夜幕', value: 'linear-gradient(135deg, #1f2937, #111827)' },
+  { name: '玳瑁', value: 'linear-gradient(135deg, #b45309, #f59e0b)' },
 ]
 
 const cardBgPresets = [
@@ -1293,9 +1500,87 @@ const cardBgPresets = [
   { name: '暗紫', value: 'linear-gradient(135deg, #2e1065 0%, #5b21b6 50%, #7c3aed 100%)' },
   { name: '深青', value: 'linear-gradient(135deg, #042f2e 0%, #115e59 50%, #0f766e 100%)' },
   { name: '炭灰', value: 'linear-gradient(135deg, #1f2937 0%, #374151 50%, #4b5563 100%)' },
+  { name: 'RPA深蓝', value: 'linear-gradient(135deg, #0b1220 0%, #123d6b 45%, #0ea5e9 100%)' },
+  { name: 'RPA流光', value: 'linear-gradient(135deg, #111827 0%, #0f766e 45%, #22d3ee 100%)' },
+  { name: '深金', value: 'linear-gradient(135deg, #451a03 0%, #92400e 50%, #f59e0b 100%)' },
+  { name: '石墨', value: 'linear-gradient(135deg, #111827 0%, #374151 50%, #6b7280 100%)' },
 ]
 
+function isPickerExpanded(key) {
+  return !!expandedPickers.value[key]
+}
+
+function togglePickerExpand(key) {
+  expandedPickers.value[key] = !expandedPickers.value[key]
+}
+
+// 从渐变或颜色字符串中提取第一个可用的十六进制颜色
+function extractFirstColor(colorStr) {
+  if (!colorStr) return '#6366f1'
+  
+  // 如果是十六进制颜色，直接返回
+  if (/^#[0-9A-Fa-f]{6}$/.test(colorStr)) {
+    return colorStr
+  }
+  
+  // 如果是 rgb/rgba，转换为十六进制
+  const rgbMatch = colorStr.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/)
+  if (rgbMatch) {
+    const r = parseInt(rgbMatch[1]).toString(16).padStart(2, '0')
+    const g = parseInt(rgbMatch[2]).toString(16).padStart(2, '0')
+    const b = parseInt(rgbMatch[3]).toString(16).padStart(2, '0')
+    return `#${r}${g}${b}`
+  }
+  
+  // 如果是渐变，提取第一个十六进制颜色
+  const hexMatch = colorStr.match(/#[0-9A-Fa-f]{6}/)
+  if (hexMatch) {
+    return hexMatch[0]
+  }
+  
+  // 默认返回蓝色
+  return '#6366f1'
+}
+
+function getVisiblePickerItems(items, key, collapsedCount) {
+  return isPickerExpanded(key) ? items : items.slice(0, collapsedCount)
+}
+
+function currentFeatureIconSet(excludeField = '') {
+  if (!editingCard.value) return new Set()
+  return new Set(
+    ['feature1Icon', 'feature2Icon', 'feature3Icon']
+      .filter(field => field !== excludeField)
+      .map(field => editingCard.value[field])
+      .filter(Boolean)
+  )
+}
+
+function isFeatureIconDisabled(field, icon) {
+  return currentFeatureIconSet(field).has(icon)
+}
+
+function selectFeatureIcon(field, icon) {
+  if (!editingCard.value || isFeatureIconDisabled(field, icon)) return
+  editingCard.value[field] = icon
+}
+
+function updateFeatureIcon(field, value) {
+  if (!editingCard.value) return
+  const normalized = (value || '').trim()
+  if (normalized && isFeatureIconDisabled(field, normalized)) return
+  editingCard.value[field] = normalized
+}
+
+function handleModuleChange(moduleKey) {
+  if (!editingCard.value) return
+  editingCard.value.moduleKey = moduleKey
+  editingCard.value.path = moduleKey ? (navModuleMap.value[moduleKey] || '') : ''
+}
+
 async function openBannerEditor() {
+  if (!canEditCarousel.value) return
+
   // 从后端拉取全部卡片列表（含隐藏的）用于编辑
   try {
     const token = useCookie('token').value || localStorage.getItem('token') || ''
@@ -1309,15 +1594,7 @@ async function openBannerEditor() {
       },
     })
     if (res.code === 200 && res.data) {
-      editingCarouselItems.value = res.data.map(item => ({
-        ...item,
-        isVisible: item.isVisible === 1 || item.isVisible === true,
-        tags: [
-          { icon: item.feature1Icon || '✨', text: item.feature1 || '' },
-          { icon: item.feature2Icon || '✨', text: item.feature2 || '' },
-          { icon: item.feature3Icon || '✨', text: item.feature3 || '' },
-        ].filter(t => t.text),
-      }))
+      editingCarouselItems.value = res.data.map(item => normalizeCarouselItem(item))
     } else {
       // 接口失败时用本地数据兜底
       editingCarouselItems.value = JSON.parse(JSON.stringify(carouselItems.value))
@@ -1414,20 +1691,21 @@ function addBannerItem() {
     emoji: '🆕',
     iconBg: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
     cardBg: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4c1d95 100%)',
+    styleType: 'module',
+    moduleKey: '',
     title: '',
     subtitle: '',
     btnText: '查看详情',
-    path: '/',
+    path: '',
     feature1: '',
+    feature1Icon: '',
     feature2: '',
+    feature2Icon: '',
     feature3: '',
+    feature3Icon: '',
     sort: editingCarouselItems.value.filter(item => item.isVisible !== false).length + 1,
     isVisible: true,
-    tags: [
-      { icon: '✨', text: '标签1' },
-      { icon: '✨', text: '标签2' },
-      { icon: '✨', text: '标签3' },
-    ],
+    tags: [],
   }
   editingCardIndex.value = -1
   editingCard.value = pendingNewItem.value
@@ -1478,7 +1756,7 @@ function computeSaveChanges() {
   const serialize = (item) => JSON.stringify({
     title: item.title || '', subtitle: item.subtitle || '', emoji: item.emoji || '',
     iconBg: item.iconBg || '', cardBg: item.cardBg || '', btnText: item.btnText || '',
-    path: item.path || '', feature1: item.feature1 || '', feature1Icon: item.feature1Icon || '',
+    path: item.path || '', styleType: item.styleType || 'module', moduleKey: item.moduleKey || '', feature1: item.feature1 || '', feature1Icon: item.feature1Icon || '',
     feature2: item.feature2 || '', feature2Icon: item.feature2Icon || '',
     feature3: item.feature3 || '', feature3Icon: item.feature3Icon || '',
     isVisible: item.isVisible !== false,
@@ -1572,6 +1850,8 @@ async function saveBannerItems() {
         cardBg: String(item.cardBg || ''),
         btnText: String(item.btnText || ''),
         path: String(item.path || ''),
+        styleType: String(item.styleType || 'module'),
+        moduleKey: String(item.moduleKey || ''),
         feature1: String(item.feature1 || ''),
         feature1Icon: String(item.feature1Icon || ''),
         feature2: String(item.feature2 || ''),
@@ -1644,10 +1924,12 @@ async function confirmSave() {
     emoji: item.emoji,
     iconBg: item.iconBg,
     cardBg: item.cardBg,
+    styleType: 'module',
+    moduleKey: item.moduleKey || '',
     title: item.title,
     subtitle: item.subtitle,
     btnText: item.btnText,
-    path: item.path,
+    path: resolveCarouselPath(item),
     feature1: item.feature1,
     feature1Icon: item.feature1Icon,
     feature2: item.feature2,
@@ -1740,8 +2022,8 @@ function getNavPath(key, fallback) {
 
 onMounted(() => {
   loadCarouselData()
+  loadHomepageMemberPlans()
   loadNavModules()
-  loadHomepageNotices()
   loadHotCourses()
   loadHotBooks()
   loadHotExams()
@@ -2463,49 +2745,169 @@ const basicPlans = [
   },
 ]
 
+const defaultMemberModePlans = [
+  {
+    id: 'vip-month',
+    memberType: 'VIP用户',
+    period: '月付',
+    name: 'VIP月卡',
+    description: '适合按阶段学习，支持多月续费，权益按月叠加',
+    benefits: [
+      { title: '专属内容访问', description: '解锁 VIP 课程、电子书与考试题库中的会员内容' },
+      { title: '学习工具额度', description: '获得会员可用的工具使用次数与学习辅助能力' },
+      { title: '会员身份标识', description: '个人中心展示 VIP 身份，到期前可继续续费叠加' },
+    ],
+    price: '¥148.00',
+    priceSuffix: '起',
+    originalPrice: '¥176.00',
+    unitPrice: '¥88.80/月，2个月起购',
+    buttonText: '立即开通',
+    featured: false,
+    tone: 'vip',
+  },
+  {
+    id: 'vip-year',
+    memberType: 'VIP用户',
+    period: '年付',
+    name: 'VIP年卡',
+    description: '适合长期学习，年付比月付更划算',
+    benefits: [
+      { title: '全年 VIP 内容访问', description: '12 个月持续解锁 VIP 课程、电子书与考试题库' },
+      { title: '年付价格保护', description: '按年付费锁定低价，适合长期学习路线' },
+      { title: '优先功能体验', description: '优先体验新学习工具、新题库和会员专属活动' },
+    ],
+    price: '¥288.00',
+    priceSuffix: '',
+    originalPrice: '¥1056.00',
+    unitPrice: '¥288.00/年',
+    buttonText: '立即开通',
+    badge: '推荐',
+    featured: true,
+    tone: 'vip',
+  },
+  {
+    id: 'small-class-year',
+    memberType: '小班用户',
+    period: '年付',
+    name: '小班用户年卡',
+    description: '小班用户仅支持年付，享受更深度的陪伴式学习权益',
+    benefits: [
+      { title: '小班专属内容', description: '解锁小班课程、资料包与高阶学习路径' },
+      { title: '深度学习陪伴', description: '享受更高优先级的答疑、反馈和学习支持' },
+      { title: '年度成长计划', description: '适合一年制系统学习，权益按年续期' },
+    ],
+    price: '¥1888.00',
+    priceSuffix: '',
+    originalPrice: '¥2888.00',
+    unitPrice: '¥1888.00/年',
+    buttonText: '立即申请',
+    featured: false,
+    tone: 'small-class',
+  },
+]
+
+const memberModePlansRaw = ref(defaultMemberModePlans)
+
+const memberModePlans = computed(() => memberModePlansRaw.value)
+
 const adExpanded = ref(false)
+const homepageAnnouncementRefreshType = 'ANNOUNCEMENT_REFRESH'
+const homepageAnnouncementRefreshAction = 'refresh'
 
-// ===== 首页公告栏（对接后端接口 + WebSocket 实时刷新） =====
-const noticesFromApi = ref([])   // 公告栏 channel=1
-const dynamicsFromApi = ref([])  // 动态栏 channel=2
+// ===== 首页公告栏参数，对接 osh-backend 的实际公告接口 =====
+const homepageAnnouncementBoardProps = computed(() => ({
+  moduleName: '首页模块',
+  noticeApiPath: '/homepage/announcement/notice',
+  dynamicApiPath: '/homepage/announcement/dynamic',
+  requestMethod: 'GET',
+  noticeScrollDurationSeconds: 180,
+  dynamicScrollDurationSeconds: 300,
+  noticeAccentColors: ['#111827', '#1f2937', '#374151', '#4b5563'],
+  dynamicAccentColors: ['#111827', '#1f2937', '#374151', '#4b5563'],
+  linkBaseURL: process.client ? window.location.origin : 'http://localhost:3000',
+  linkPathRewriters: [
+    { pattern: '^/book/detail/', replace: '/detail/book/' },
+    { pattern: '^/course/detail/', replace: '/course_detail/' },
+  ],
+  noticeLabel: '通知',
+  dynamicLabel: '公告',
+  enableWsRefresh: true,
+  refreshWsType: homepageAnnouncementRefreshType,
+  refreshTrigger: announcementRefreshFlags.value[
+    buildAnnouncementRefreshKey(
+      homepageAnnouncementRefreshType,
+      'homepage',
+      homepageAnnouncementRefreshAction,
+    )
+  ] || 0,
+}))
 
-async function loadHomepageNotices() {
-  try {
-    const [noticeRes, dynamicRes] = await Promise.all([
-      $fetch('/homepage/announcement/notice?limit=10', {
-        baseURL: fetchConfig.baseURL,
-        headers: { appid: fetchConfig.headers.appid },
-      }),
-      $fetch('/homepage/announcement/dynamic?limit=10', {
-        baseURL: fetchConfig.baseURL,
-        headers: { appid: fetchConfig.headers.appid },
-      }),
-    ])
-    if (noticeRes && noticeRes.data && noticeRes.data.length > 0) {
-      noticesFromApi.value = noticeRes.data.map(item => ({
-        text: (item.icon ? item.icon + ' ' : '') + (item.title || ''),
-        color: item.color || '#6366f1',
-      }))
-    }
-    if (dynamicRes && dynamicRes.data && dynamicRes.data.length > 0) {
-      dynamicsFromApi.value = dynamicRes.data.map(item => ({
-        text: (item.icon ? item.icon + ' ' : '') + (item.title || ''),
-        color: item.color || '#10b981',
-      }))
-    }
-  } catch (e) {
-    console.warn('[首页公告] 接口请求失败，使用默认数据', e)
+function formatMoneyText(value) {
+  const num = Number(value || 0)
+  return `¥${num.toFixed(2)}`
+}
+
+function formatMemberPeriod(plan) {
+  if (plan?.memberType === 'small_class') return '年付'
+  return (plan?.periodType === 'year' || Number(plan?.durationMonths || 0) >= 12) ? '年付' : '月付'
+}
+
+function formatMemberType(plan) {
+  return plan?.memberType === 'small_class' ? '小班用户' : 'VIP用户'
+}
+
+function formatHomepageMemberPlan(plan) {
+  const benefits = Array.isArray(plan?.benefits) ? plan.benefits : []
+  const minQuantity = Math.max(1, Number(plan?.minPurchaseQuantity || 1))
+  const isYear = plan?.periodType === 'year' || Number(plan?.durationMonths || 0) >= 12
+  const unit = isYear ? '年' : '月'
+  const displayPrice = Number(plan?.displayPrice ?? plan?.price ?? 0)
+  const displayOriginalPrice = Number(plan?.displayOriginalPrice ?? plan?.originalPrice ?? 0)
+
+  return {
+    id: plan?.id || plan?.planCode,
+    memberType: formatMemberType(plan),
+    period: formatMemberPeriod(plan),
+    name: plan?.planName || '未命名套餐',
+    description: plan?.description || '开通后自动发放对应会员权益。',
+    benefits: benefits.slice(0, 3).map(item => ({
+      title: item?.benefitTitle || '会员权益',
+      description: item?.benefitDescription || '',
+    })),
+    price: formatMoneyText(displayPrice),
+    priceSuffix: minQuantity > 1 ? '起' : '',
+    originalPrice: displayOriginalPrice > displayPrice ? formatMoneyText(displayOriginalPrice) : '',
+    unitPrice: `${formatMoneyText(plan?.price)}/${unit}${minQuantity > 1 ? `，${minQuantity}${unit}起购` : ''}`,
+    buttonText: plan?.memberType === 'small_class' ? '立即申请' : '立即开通',
+    badge: plan?.recommended || plan?.planCode === 'vip_year' ? '推荐' : '',
+    featured: !!plan?.recommended || plan?.planCode === 'vip_year',
+    tone: plan?.memberType === 'small_class' ? 'small-class' : 'vip',
   }
 }
 
-// WebSocket 实时推送：后端广播 HOMEPAGE_ANNOUNCEMENT_REFRESH 时重新拉取
-const { homepageAnnouncementRefreshFlag } = useWebSocket()
-watch(homepageAnnouncementRefreshFlag, (val) => {
-  if (process.client && val) {
-    console.log('[首页公告] WS 推送刷新，重新拉取公告数据')
-    loadHomepageNotices()
+async function loadHomepageMemberPlans() {
+  try {
+    const homepagePlans = await apiGetHomepageMemberPlans()
+    if (Array.isArray(homepagePlans) && homepagePlans.length) {
+      memberModePlansRaw.value = homepagePlans.map(formatHomepageMemberPlan)
+      return
+    }
+  } catch (e) {
+    console.warn('首页会员套餐聚合接口请求失败，回退到会员模块接口', e)
   }
-})
+
+  try {
+    const memberPlans = await apiGetMemberPlans()
+    if (Array.isArray(memberPlans) && memberPlans.length) {
+      memberModePlansRaw.value = memberPlans.map(formatHomepageMemberPlan)
+      return
+    }
+  } catch (e) {
+    console.warn('会员模块套餐接口请求失败，使用默认套餐展示', e)
+  }
+
+  memberModePlansRaw.value = defaultMemberModePlans
+}
 
 // 公告栏数据
 const noticePaused = ref(false)
@@ -2528,38 +2930,6 @@ const notices2 = [
   { text: '📝 在线考试新增错题本功能，智能复习更高效', color: '#10b981' },
   { text: '🚀 React 18 + Next.js 企业级项目实战课程已上线', color: '#8b5cf6' },
   { text: '💰 邀请好友注册，双方各得 20 元优惠券', color: '#ec4899' },
-]
-
-const vipPeriod = ref('year')
-const vipPeriods = [
-  { key: 'year', label: '年度', price: 188, unit: '年', save: null },
-]
-const vipCurrentPrice = computed(() => vipPeriods.find(p => p.key === vipPeriod.value)?.price)
-const vipCurrentLabel = computed(() => vipPeriods.find(p => p.key === vipPeriod.value)?.unit)
-const vipFeatures = ['全站免费 + 付费课程', 'VIP 专属直播课', '专属题库全解锁', '优先答疑通道', '学习进度云同步','内部网站浏览']
-
-// 小班专属亮点
-const classHighlights = [
-  { icon: '👥', title: '试用期包过-就业全流程陪伴', desc: '针对每个人技术路径规划,提供面试指导-入职-试用期技术支持' },
-  { icon: '💬', title: '小班专属技术培训', desc: '每周定期培训，模拟答复' },
-  { icon: '📋', title: '公司级商用项目实战', desc: '支持商用级项目实战带教，中-高级开发技术路线实践' },
-]
-const classFeatures = ['含全部付费课程权限', '网站全功能权限', '专人带教 + 小班技术培训', '简历指导+模拟面试+入职服务', '试用期陪伴', '终身回看']
-
-// 小班展开内容
-const classExpanded = ref(false)
-const classStudents = [
-  '应届毕业生 → 3个月拿到offer，入职中大型互联网公司',
-  '转行学员 → 从零基础到独立完成企业级项目开发',
-  '1-3年经验 → 技术瓶颈突破，薪资涨幅30%-50%',
-  '在职提升 → 边工作边学习，系统补齐技术短板',
-]
-const classTechPath = [
-  { title: '基础夯实', desc: '前端/后端核心技术体系梳理，查漏补缺' },
-  { title: '项目实战', desc: '参与公司级商用项目，积累真实开发经验' },
-  { title: '代码Review', desc: '一对一代码审查，培养工程化编码习惯' },
-  { title: '模拟面试', desc: '真实面试场景模拟，针对性查缺补漏' },
-  { title: '入职护航', desc: '入职后试用期全程技术支持，确保顺利转正' },
 ]
 
 // Feature icons
@@ -2968,59 +3338,538 @@ const features = [
 
 /* ===== 单卡片详细编辑弹窗 ===== */
 .card-detail-modal {
-  background: #fff;
-  border-radius: 16px;
-  width: 860px;
-  max-width: 94vw;
+  background: linear-gradient(180deg, #fcfcfd 0%, #f7f8fc 100%);
+  border-radius: 24px;
+  width: min(1200px, 96vw);
   max-height: 92vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 24px 64px rgba(0,0,0,0.2);
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  box-shadow: 0 32px 80px rgba(15, 23, 42, 0.22);
 }
 .card-detail-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 18px 24px;
-  border-bottom: 1px solid #e5e7eb;
+  gap: 16px;
+  padding: 22px 28px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.9);
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(18px);
 }
-.card-detail-header h3 { margin: 0; font-size: 16px; font-weight: 700; color: #1f2937; }
-.card-detail-body { flex: 1; overflow-y: auto; padding: 20px 24px; }
-.card-detail-preview {
-  border-radius: 12px;
-  padding: 20px;
+.card-detail-header h3 {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 800;
+  color: #111827;
+  letter-spacing: -0.02em;
+}
+.card-detail-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.card-detail-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  min-width: 0;
+  width: 100%;
+}
+.card-detail-section {
+  padding: 20px 22px;
+  border-radius: 20px;
+  border: 1px solid #e5eaf3;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 249, 252, 0.96));
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+}
+.card-detail-form > .card-detail-section:nth-child(3),
+.card-detail-form > .card-detail-section:nth-child(4) {
+  grid-column: 1 / -1;
+}
+.card-detail-section-title {
   display: flex;
   align-items: center;
-  gap: 14px;
-  margin-bottom: 20px;
+  gap: 8px;
+  margin-bottom: 16px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #111827;
 }
-.card-detail-preview-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 10px;
+.card-detail-helper,
+.feature-desc,
+.feature-icon-hint-modern {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #6b7280;
+}
+.card-detail-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.card-detail-field label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #6b7280;
+  letter-spacing: 0.02em;
+}
+.card-detail-input {
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 14px;
+  border: 1px solid #dbe3ef;
+  border-radius: 14px;
+  font-size: 14px;
+  color: #111827;
+  background: #fff;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+.card-detail-input:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 4px rgba(99,102,241,0.10);
+}
+.card-detail-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.card-detail-row-basic {
+  align-items: start;
+}
+.card-detail-row-module {
+  align-items: start;
+}
+.card-detail-row .card-detail-field {
+  flex: 1;
+}
+.card-detail-row-emoji {
+  grid-template-columns: 120px minmax(0, 1fr);
+  align-items: start;
+}
+.card-detail-emoji-module {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+  padding: 16px 18px;
+  border-radius: 18px;
+  border: 1px solid #e7ebf3;
+  background: #f8fafc;
+  margin-bottom: 30px;
+}
+.card-detail-emoji-preview-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 92px;
+  border-radius: 0;
+  color: #fff;
+  font-size: 38px;
+  box-shadow: none;
+  margin-bottom: 12px;
+  position: relative;
+  overflow: visible;
+  background: transparent !important;
+}
+.card-detail-emoji-preview-card::after {
+  display: none;
+}
+.card-detail-emoji-preview-card span {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 92px;
+  height: 92px;
+  border-radius: 24px;
+  background: var(--emoji-accent);
+  box-shadow: 0 16px 30px rgba(15, 23, 42, 0.12);
+}
+.card-detail-row-features-modern {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+}
+.card-detail-field-emoji-input {
+  max-width: none;
+}
+.emoji-input-large {
+  text-align: center;
+  font-size: 28px;
+  min-height: 88px;
+  padding: 20px 10px;
+}
+.card-detail-field-emoji-grid {
+  min-width: 0;
+}
+.emoji-grid-40 {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(42px, 1fr));
+  gap: 10px;
+}
+.emoji-grid-item {
+  height: 42px;
+  border-radius: 12px;
+  background: #f3f6fb;
+  border: 1px solid transparent;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 22px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  cursor: pointer;
+  transition: all 0.18s ease;
 }
-.card-detail-preview-title { font-size: 18px; font-weight: 700; color: #fff; }
-.card-detail-preview-sub { font-size: 13px; color: rgba(255,255,255,0.7); margin-top: 2px; }
-.card-detail-form { display: flex; flex-direction: column; gap: 14px; }
-.card-detail-field { display: flex; flex-direction: column; gap: 4px; }
-.card-detail-field label { font-size: 12px; font-weight: 500; color: #6b7280; }
-.card-detail-input {
-  padding: 9px 12px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  font-size: 14px;
-  color: #1f2937;
+.emoji-grid-item:hover {
+  background: #e8eefc;
+  transform: translateY(-1px);
+}
+.emoji-grid-item.active {
+  border-color: #6366f1;
+  background: #eef2ff;
+  box-shadow: 0 0 0 3px rgba(99,102,241,0.10);
+}
+.color-picker-row {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+.color-input-text {
+  min-width: 0;
+}
+.color-picker-native {
+  width: 56px;
+  height: 48px;
+  padding: 4px;
+  border: 1px solid #dbe3ef;
+  border-radius: 14px;
   background: #fff;
-  transition: border-color 0.2s;
+  cursor: pointer;
 }
-.card-detail-input:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99,102,241,0.08); }
-.card-detail-row { display: flex; gap: 12px; }
-.card-detail-row .card-detail-field { flex: 1; }
+.color-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+.color-preset-item {
+  position: relative;
+  height: 44px;
+  border-radius: 14px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.10);
+  transition: all 0.18s ease;
+}
+.color-preset-item:hover {
+  transform: translateY(-1px);
+}
+.color-preset-item.active {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99,102,241,0.10), 0 10px 20px rgba(15, 23, 42, 0.12);
+}
+.color-preset-check {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.35);
+}
+.picker-expand-btn-modern {
+  margin-top: 12px;
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid #dbe3ef;
+  background: #fff;
+  color: #4b5563;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+.picker-expand-btn-modern:hover {
+  border-color: #c7d2fe;
+  background: #eef2ff;
+  color: #4338ca;
+}
+.picker-expand-btn-sm {
+  padding: 6px 10px;
+  font-size: 11px;
+}
+.feature-input-row-modern {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 10px;
+}
+.feature-icon-input-modern {
+  text-align: center;
+  font-size: 18px;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+.feature-text-input-modern {
+  min-width: 0;
+}
+.feature-emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(34px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+.feature-emoji-item {
+  height: 34px;
+  border-radius: 10px;
+  background: #f3f6fb;
+  border: 1px solid transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+.feature-emoji-item:hover {
+  background: #e8eefc;
+}
+.feature-emoji-item.active {
+  border-color: #6366f1;
+  background: #eef2ff;
+}
+.feature-emoji-item.disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.card-detail-preview {
+  position: relative;
+  border-radius: 24px;
+  padding: 24px;
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 22px;
+  min-height: 300px;
+  overflow: hidden;
+  box-shadow: 0 24px 50px rgba(37, 31, 94, 0.22);
+  width: 100%;
+}
+.card-detail-preview::after {
+  content: '';
+  position: absolute;
+  right: -80px;
+  bottom: -90px;
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.10);
+}
+.card-detail-preview-left,
+.card-detail-preview-right {
+  position: relative;
+  z-index: 1;
+}
+.card-detail-preview-left {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 18px;
+  flex: 1;
+  min-width: 0;
+  padding-left: 8px;
+}
+.card-detail-preview-right {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+  justify-content: flex-start;
+  flex-shrink: 0;
+  padding-top: 6px;
+}
+.card-detail-preview-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
+  box-shadow: 0 14px 28px rgba(0,0,0,0.18);
+  flex-shrink: 0;
+}
+.card-detail-preview-text {
+  min-width: 0;
+}
+.card-detail-preview-left .grid-card-btn,
+.card-detail-preview-cta {
+  margin-top: 8px;
+}
+.card-detail-preview-title {
+  font-size: 30px;
+  line-height: 1.1;
+  font-weight: 800;
+  color: #fff;
+}
+.card-detail-preview-sub {
+  margin-top: 8px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: rgba(255,255,255,0.82);
+}
+.preview-feature-tag {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.16);
+  border: 1px solid rgba(255,255,255,0.14);
+  color: #fff;
+  backdrop-filter: blur(10px);
+}
+.preview-feature-icon {
+  font-size: 16px;
+}
+.preview-feature-text {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.card-detail-textarea {
+  min-height: 72px;
+  line-height: 1.6;
+  resize: vertical;
+}
+.card-detail-field-subtitle {
+  margin-top: 14px;
+}
+.card-detail-color-block {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 18px;
+  border: 1px solid #e7ebf3;
+  background: #f8fafc;
+}
+.card-detail-color-block + .card-detail-color-block {
+  margin-top: 14px;
+}
+.card-detail-color-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.card-detail-color-header label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #111827;
+}
+.card-detail-color-desc,
+.card-detail-color-panel-desc {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #6b7280;
+}
+.card-detail-color-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+.card-detail-color-top-embedded {
+  grid-column: 1 / -1;
+  padding-top: 6px;
+  border-top: 1px solid rgba(219, 227, 239, 0.9);
+}
+.card-detail-color-copy {
+  min-width: 0;
+}
+.card-detail-color-copy label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #111827;
+}
+.card-detail-color-note {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #94a3b8;
+}
+.card-detail-color-meta {
+  margin: 8px 0 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #4f46e5;
+}
+.card-detail-color-side-label {
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #4f46e5 !important;
+  letter-spacing: 0.02em;
+}
+.card-detail-color-input-side {
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+}
+.card-detail-color-input-side .color-picker-row {
+  width: 100%;
+  align-items: stretch;
+}
+.card-detail-color-input-side .color-input-text {
+  min-height: 100%;
+  font-size: 16px;
+  padding-left: 18px;
+}
+.card-detail-color-panel {
+  min-width: 0;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px dashed #d4dbe7;
+  background: rgba(255, 255, 255, 0.92);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.card-detail-color-panel-expanded {
+  gap: 10px;
+  padding: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.96));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.85);
+  margin-top: 8px;
+}
+.card-detail-color-panel-embedded {
+  grid-column: 1 / -1;
+  margin-top: 0;
+}
+.card-detail-color-panel .color-preset-grid {
+  margin-top: 0;
+}
 .card-detail-toggle {
   padding: 8px 16px;
   border: 1px solid #e5e7eb;
@@ -3038,9 +3887,10 @@ const features = [
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 10px;
-  padding: 14px 24px;
-  border-top: 1px solid #e5e7eb;
+  gap: 12px;
+  padding: 18px 28px;
+  border-top: 1px solid rgba(226, 232, 240, 0.9);
+  background: rgba(255, 255, 255, 0.9);
 }
 
 /* ===== 预设选择器 ===== */
@@ -3319,6 +4169,28 @@ const features = [
 
 /* ===== 响应式 ===== */
 @media (max-width: 992px) {
+  .card-detail-modal {
+    width: min(960px, 96vw);
+  }
+  .card-detail-preview {
+    min-height: 180px;
+  }
+  .card-detail-form {
+    grid-template-columns: 1fr;
+  }
+  .card-detail-form > .card-detail-section:nth-child(3),
+  .card-detail-form > .card-detail-section:nth-child(4) {
+    grid-column: auto;
+  }
+  .card-detail-row-features-modern {
+    grid-template-columns: 1fr;
+  }
+  .card-detail-emoji-module {
+    grid-template-columns: 1fr;
+  }
+  .card-detail-color-top {
+    grid-template-columns: 1fr;
+  }
   .carousel-grid {
     gap: 2px;
   }
@@ -3335,6 +4207,70 @@ const features = [
 }
 
 @media (max-width: 640px) {
+  .card-detail-modal {
+    width: 100vw;
+    max-width: 100vw;
+    max-height: 100vh;
+    border-radius: 0;
+  }
+  .card-detail-header {
+    padding: 18px 16px;
+  }
+  .card-detail-header h3 {
+    font-size: 22px;
+  }
+  .card-detail-body {
+    padding: 16px;
+    gap: 16px;
+  }
+  .card-detail-form {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .card-detail-section {
+    padding: 16px;
+    border-radius: 16px;
+  }
+  .card-detail-row,
+  .card-detail-row-emoji,
+  .card-detail-row-features-modern,
+  .color-picker-row,
+  .feature-input-row-modern {
+    grid-template-columns: 1fr;
+  }
+  .card-detail-emoji-module {
+    grid-template-columns: 1fr;
+    padding: 14px;
+  }
+  .card-detail-field-emoji-input {
+    max-width: none;
+  }
+  .emoji-grid-40 {
+    grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
+  }
+  .card-detail-preview {
+    padding: 18px;
+    border-radius: 18px;
+    flex-direction: column;
+  }
+  .card-detail-preview-right {
+    width: 100%;
+    align-items: flex-start;
+  }
+  .card-detail-color-block {
+    padding: 16px;
+  }
+  .card-detail-preview-title {
+    font-size: 24px;
+  }
+  .card-detail-preview-icon {
+    width: 54px;
+    height: 54px;
+    font-size: 26px;
+  }
+  .card-detail-footer {
+    padding: 16px;
+  }
   .carousel-grid {
     grid-template-columns: 1fr;
     grid-template-rows: auto;
@@ -3865,204 +4801,138 @@ const features = [
   border-bottom: 2px solid #ede9fe;
 }
 
-/* 横向套餐布局 */
-.pricing-horizontal {
+.member-plan-row {
+  margin-top: 28px;
+}
+
+.member-plan-card {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid #dbe4ff;
+  border-radius: 18px;
+  padding: 26px 24px 22px;
+  box-shadow: 0 10px 30px rgba(99, 102, 241, 0.08);
+}
+
+.member-plan-card-featured {
+  border-color: #f6c880;
+  box-shadow: 0 12px 36px rgba(245, 158, 11, 0.16);
+}
+
+.member-plan-card-class {
+  border-color: #c7d2fe;
+  box-shadow: 0 10px 30px rgba(99, 102, 241, 0.12);
+}
+
+.member-plan-topline {
   display: flex;
-  flex-direction: column;
-  gap: 20px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #2563eb;
 }
-.pricing-h-card {
-  position: relative;
+
+.member-plan-period {
+  color: #315efb;
+}
+
+.member-plan-title-row {
   display: flex;
-  align-items: stretch;
-  background: white;
-  border-radius: 16px;
-  border: 1px solid #e9d5ff;
-  padding: 24px 28px;
-  gap: 28px;
-  min-height: 200px;
-  transition: all 0.3s ease;
-}
-.pricing-h-class {
-  flex-direction: column;
-  background: linear-gradient(135deg, #faf5ff 0%, #f5f3ff 100%);
-  border: 2px solid #c4b5fd;
-}
-.ph-top-row {
-  display: flex;
-  align-items: stretch;
-  gap: 28px;
-  width: 100%;
-}
-.pricing-h-vip {
-  background: linear-gradient(135deg, #EAEAEA, #D4D4D4, #bfdbfe, #93c5fd);
-  border-color: #93c5fd;
-}
-.pricing-h-vip .ph-title,
-.pricing-h-vip .ph-sub,
-.pricing-h-vip .ph-price-unit {
-  color: #1e293b;
-}
-.pricing-h-vip .ph-price-num {
-  color: #1e40af;
-}
-.pricing-h-vip .ph-feat-list {
-  color: #1e293b;
-}
-.pricing-h-vip .ph-check {
-  background: rgba(30, 64, 175, 0.12);
-  color: #1e40af;
-}
-@keyframes vip-ocean {
-  0% { background-position: 0% 50%; }
-  25% { background-position: 50% 100%; }
-  50% { background-position: 100% 50%; }
-  75% { background-position: 50% 0%; }
-  100% { background-position: 0% 50%; }
-}
-.ph-vip-intro {
-  display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 10px;
+  margin-bottom: 14px;
 }
-.ph-vip-slogan {
-  font-size: 15px;
-  font-weight: 700;
-  color: #1e40af;
+
+.member-plan-title {
   margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  color: #0f172a;
 }
-.ph-vip-desc {
-  font-size: 13px;
-  color: #334155;
-  line-height: 1.6;
-  margin: 0;
-}
-.ph-vip-tip {
+
+.member-plan-badge {
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid #fdba74;
+  background: #fff7ed;
+  color: #f59e0b;
   font-size: 12px;
-  color: #475569;
-  margin: 0;
+  font-weight: 700;
+  line-height: 1;
 }
-.ph-left {
-  min-width: 200px;
+
+.member-plan-desc {
+  margin: 0 0 18px;
+  font-size: 13px;
+  line-height: 1.8;
+  color: #64748b;
+  min-height: 54px;
+}
+
+.member-plan-benefits {
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  gap: 12px;
+  margin-bottom: 22px;
 }
-.ph-badge {
-  display: inline-block;
-  background: linear-gradient(135deg, #f59e0b, #f97316);
-  color: white;
-  font-size: 11px;
-  font-weight: 700;
-  padding: 3px 10px;
-  border-radius: 4px;
-  margin-bottom: 8px;
-  width: fit-content;
+
+.member-plan-benefit {
+  padding-left: 14px;
+  border-left: 4px solid #22c55e;
 }
-.ph-icon-vip {
-  font-size: 32px;
-  margin-bottom: 8px;
+
+.member-plan-benefit strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 14px;
+  color: #0f172a;
 }
-.ph-title {
-  font-size: 20px;
-  font-weight: 700;
-  color: #1e1b4b;
-  margin: 0 0 4px;
-}
-.ph-sub {
+
+.member-plan-benefit span {
+  display: block;
   font-size: 13px;
-  color: #6b7280;
-  margin: 0 0 12px;
+  line-height: 1.7;
+  color: #64748b;
 }
-.ph-price {
+
+.member-plan-price-row {
   display: flex;
   align-items: baseline;
-  gap: 4px;
+  gap: 12px;
+  margin-top: auto;
+  margin-bottom: 8px;
 }
-.ph-price-num {
+
+.member-plan-price-main {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.member-plan-price-main strong {
   font-size: 28px;
-  font-weight: 800;
-  color: #7c3aed;
+  line-height: 1;
+  font-weight: 900;
+  color: #dc2626;
 }
-.ph-price-unit {
-  font-size: 13px;
-  color: #6b7280;
+
+.member-plan-price-main span {
+  font-size: 14px;
+  color: #475569;
 }
-.ph-middle {
-  flex: 1;
-  display: flex;
-  align-items: stretch;
-  border-left: 1px solid #e9d5ff;
-  border-right: 1px solid #e9d5ff;
-  padding: 0 28px;
+
+.member-plan-price-row del {
+  font-size: 14px;
+  color: #94a3b8;
 }
-.ph-middle-vip {
-  border: none;
-  padding: 0 24px;
-}
-.ph-highlights {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  width: 100%;
-  justify-content: space-between;
-  flex: 1;
-  padding: 12px 0;
-}
-.ph-hl {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-}
-.ph-hl-icon {
-  font-size: 16px;
-  flex-shrink: 0;
-}
-.ph-hl-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #1f2937;
-}
-.ph-hl-desc {
-  font-size: 11px;
-  color: #6b7280;
-  line-height: 1.4;
-}
-.ph-right {
-  min-width: 180px;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  padding-left: 0;
-  margin-left: -12px;
-}
-.ph-feat-list {
-  list-style: none;
-  padding: 0;
-  margin: 0 0 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+
+.member-plan-unit-price {
+  display: block;
+  margin-bottom: 18px;
   font-size: 12px;
-  color: #374151;
-}
-.ph-feat-list li {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.ph-check {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: #d1fae5;
-  color: #059669;
-  font-size: 10px;
-  font-weight: 700;
-  flex-shrink: 0;
+  color: #64748b;
 }
 .ph-btn {
   padding: 10px 20px;
