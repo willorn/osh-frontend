@@ -41,7 +41,7 @@ env:
 
 jobs:
   deploy:
-    name: Build and deploy frontend to 149 (${{ env.SLOT }})
+    name: Build and deploy frontend to 149 (${{ github.event.inputs.slot || github.event.client_payload.slot || 'green' }})
     runs-on: ubuntu-latest
     steps:
       - name: Validate inputs
