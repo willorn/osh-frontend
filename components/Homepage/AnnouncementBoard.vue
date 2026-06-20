@@ -1,17 +1,18 @@
 <template>
   <section class="notice-section homepage-notice-section">
-    <div class="notice-bar">
-      <div class="notice-label">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <div class="notice-bar notice-bar-system">
+      <div class="notice-label notice-label-system">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
           <path d="M8 1l1.8 3.6L14 5.6l-3 2.9.7 4.1L8 10.5l-3.7 2.1.7-4.1-3-2.9 4.2-.6z" stroke="white" stroke-width="1.3" stroke-linejoin="round" fill="rgba(255,255,255,0.2)" />
         </svg>
         <span>{{ noticeLabel }}</span>
       </div>
+
       <div v-if="systemAnnouncements.length > 0" class="notice-scroll-wrap">
         <div
           class="notice-scroll-track"
           :class="{ 'is-static': systemAnnouncements.length < 2 }"
-          :style="{ animationPlayState: systemPaused ? 'paused' : 'running' }"
+          :style="buildTrackStyle(systemPaused, resolvedNoticeScrollDurationSeconds)"
           @mouseenter="systemPaused = true"
           @mouseleave="systemPaused = false"
         >
@@ -20,38 +21,44 @@
             :key="`system-${item.id}-${index}`"
             class="notice-item"
           >
-            <span class="notice-dot"></span>
+            <span class="notice-dot" :style="resolveDotStyle(item)"></span>
+            <span class="notice-icon" :style="resolveIconStyle(item)" aria-hidden="true">{{ resolveAnnouncementIcon(item) }}</span>
             <a
               v-if="item.link"
               class="notice-link"
               :href="item.link"
               target="_blank"
               rel="noopener noreferrer"
+              :style="resolveTitleStyle(item)"
             >
-              {{ item.title }}
+              <span class="notice-title">{{ item.title }}</span>
             </a>
-            <span v-else>{{ item.title }}</span>
+            <span v-else class="notice-text" :style="resolveTitleStyle(item)">
+              <span class="notice-title">{{ item.title }}</span>
+            </span>
             <span class="notice-sep">|</span>
           </span>
         </div>
       </div>
+
       <div v-else class="notice-empty">
         {{ loading ? loadingText : systemEmptyText }}
       </div>
     </div>
 
-    <div class="notice-bar notice-bar-2">
-      <div class="notice-label notice-label-2">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <div class="notice-bar notice-bar-dynamic">
+      <div class="notice-label notice-label-dynamic">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
           <path d="M2 4h12M2 8h12M2 12h8" stroke="white" stroke-width="1.3" stroke-linecap="round" />
         </svg>
         <span>{{ dynamicLabel }}</span>
       </div>
+
       <div v-if="businessAnnouncements.length > 0" class="notice-scroll-wrap">
         <div
           class="notice-scroll-track"
           :class="{ 'is-static': businessAnnouncements.length < 2 }"
-          :style="{ animationPlayState: businessPaused ? 'paused' : 'running' }"
+          :style="buildTrackStyle(businessPaused, resolvedDynamicScrollDurationSeconds)"
           @mouseenter="businessPaused = true"
           @mouseleave="businessPaused = false"
         >
@@ -60,21 +67,26 @@
             :key="`business-${item.id}-${index}`"
             class="notice-item"
           >
-            <span class="notice-dot"></span>
+            <span class="notice-dot" :style="resolveDotStyle(item)"></span>
+            <span class="notice-icon" :style="resolveIconStyle(item)" aria-hidden="true">{{ resolveAnnouncementIcon(item) }}</span>
             <a
               v-if="item.link"
               class="notice-link"
               :href="item.link"
               target="_blank"
               rel="noopener noreferrer"
+              :style="resolveTitleStyle(item)"
             >
-              {{ item.title }}
+              <span class="notice-title">{{ item.title }}</span>
             </a>
-            <span v-else>{{ item.title }}</span>
+            <span v-else class="notice-text" :style="resolveTitleStyle(item)">
+              <span class="notice-title">{{ item.title }}</span>
+            </span>
             <span class="notice-sep">|</span>
           </span>
         </div>
       </div>
+
       <div v-else class="notice-empty">
         {{ loading ? loadingText : businessEmptyText }}
       </div>
@@ -86,6 +98,42 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { fetchConfig } from '~/composables/useHttp'
 
+const defaultAnnouncementColors = ['#111827']
+
+const announcementIconMap = {
+  like: '👍',
+  liked: '👍',
+  thumb_up: '👍',
+  thumbs_up: '👍',
+  favorite: '❤️',
+  collect: '⭐',
+  subscribe: '🔔',
+  publish: '📢',
+  release: '🚀',
+  launch: '🚀',
+  new_release: '🚀',
+  online: '🆕',
+  new_tool: '🆕',
+  refresh: '🔄',
+  audit: '🛡️',
+  approve: '✅',
+  approved: '✅',
+  review_pass: '✅',
+  review_reject: '⛔',
+  reject: '⛔',
+  payment: '💳',
+  paid: '💳',
+  purchase: '🛒',
+  order: '🛒',
+  course: '📚',
+  course_online: '📚',
+  course_publish: '📚',
+  bugfix: '🛠️',
+  fix: '🛠️',
+  update: '✨',
+  default: '👍',
+}
+
 const props = defineProps({
   moduleName: {
     type: String,
@@ -96,6 +144,10 @@ const props = defineProps({
     default: '',
   },
   dynamicApiPath: {
+    type: String,
+    default: '',
+  },
+  apiBaseURL: {
     type: String,
     default: '',
   },
@@ -115,6 +167,14 @@ const props = defineProps({
     type: Boolean,
     default: true,
   },
+  refreshWsType: {
+    type: String,
+    default: 'ANNOUNCEMENT_REFRESH',
+  },
+  refreshTrigger: {
+    type: [Number, String],
+    default: 0,
+  },
   timeField: {
     type: String,
     default: 'createTime',
@@ -125,11 +185,39 @@ const props = defineProps({
   },
   dynamicLabel: {
     type: String,
-    default: '动态',
+    default: '公告',
   },
   loadingText: {
     type: String,
     default: '加载中...',
+  },
+  scrollDurationSeconds: {
+    type: Number,
+    default: 600,
+  },
+  noticeScrollDurationSeconds: {
+    type: Number,
+    default: 0,
+  },
+  dynamicScrollDurationSeconds: {
+    type: Number,
+    default: 0,
+  },
+  noticeAccentColors: {
+    type: Array,
+    default: () => ['#111827'],
+  },
+  dynamicAccentColors: {
+    type: Array,
+    default: () => ['#111827'],
+  },
+  linkBaseURL: {
+    type: String,
+    default: '',
+  },
+  linkPathRewriters: {
+    type: Array,
+    default: () => [],
   },
 })
 
@@ -138,6 +226,47 @@ const businessAnnouncements = ref([])
 const loading = ref(false)
 const systemPaused = ref(false)
 const businessPaused = ref(false)
+
+const resolvedBaseURL = computed(() => props.apiBaseURL || fetchConfig.baseURL)
+const resolvedScrollDurationSeconds = computed(() => {
+  const seconds = Number(props.scrollDurationSeconds)
+  return Number.isFinite(seconds) && seconds > 0 ? seconds : 600
+})
+
+const resolvedNoticeScrollDurationSeconds = computed(() => {
+  const seconds = Number(props.noticeScrollDurationSeconds)
+  return Number.isFinite(seconds) && seconds > 0 ? seconds : resolvedScrollDurationSeconds.value
+})
+
+const resolvedDynamicScrollDurationSeconds = computed(() => {
+  const seconds = Number(props.dynamicScrollDurationSeconds)
+  return Number.isFinite(seconds) && seconds > 0 ? seconds : resolvedScrollDurationSeconds.value
+})
+
+const resolvedLinkBaseURL = computed(() => {
+  const explicitBase = String(props.linkBaseURL || '').trim()
+  if (explicitBase) {
+    return explicitBase.replace(/\/$/, '')
+  }
+
+  if (process.client && window.location?.origin) {
+    return window.location.origin.replace(/\/$/, '')
+  }
+
+  return ''
+})
+
+const resolvedNoticeAccentColors = computed(() =>
+  Array.isArray(props.noticeAccentColors) && props.noticeAccentColors.length > 0
+    ? props.noticeAccentColors
+    : defaultAnnouncementColors
+)
+
+const resolvedDynamicAccentColors = computed(() =>
+  Array.isArray(props.dynamicAccentColors) && props.dynamicAccentColors.length > 0
+    ? props.dynamicAccentColors
+    : defaultAnnouncementColors
+)
 
 const duplicatedSystemAnnouncements = computed(() =>
   systemAnnouncements.value.length > 1
@@ -151,10 +280,8 @@ const duplicatedBusinessAnnouncements = computed(() =>
     : businessAnnouncements.value
 )
 
-const systemEmptyText = computed(() => `暂无${props.moduleName}的系统通知`)
-const businessEmptyText = computed(() => `暂无${props.moduleName}的业务动态`)
-
-const { homepageAnnouncementRefreshFlag } = useWebSocket()
+const systemEmptyText = computed(() => `当前暂无${props.moduleName}系统通知`)
+const businessEmptyText = computed(() => `当前暂无${props.moduleName}业务公告`)
 
 function resolveTimeValue(item) {
   if (!item || typeof item !== 'object') return 0
@@ -178,14 +305,54 @@ function flattenAnnouncementGroups(payload) {
     .flat()
 }
 
+function resolveAccentColor(channel, index) {
+  const palette = channel === 1 ? resolvedNoticeAccentColors.value : resolvedDynamicAccentColors.value
+  return palette[index % palette.length]
+}
+
+function resolveAnnouncementLink(link) {
+  const rawLink = String(link || '').trim()
+  if (!rawLink) return ''
+
+  if (/^(https?:)?\/\//i.test(rawLink) || /^(mailto:|tel:)/i.test(rawLink)) {
+    return rawLink
+  }
+
+  const normalizedPath = normalizeAnnouncementPath(rawLink.startsWith('/') ? rawLink : `/${rawLink}`)
+  return resolvedLinkBaseURL.value ? `${resolvedLinkBaseURL.value}${normalizedPath}` : normalizedPath
+}
+
+function normalizeAnnouncementPath(path) {
+  if (!path) return ''
+  if (!Array.isArray(props.linkPathRewriters) || props.linkPathRewriters.length === 0) {
+    return path
+  }
+
+  return props.linkPathRewriters.reduce((currentPath, rule) => {
+    if (!rule || !rule.pattern || !rule.replace) {
+      return currentPath
+    }
+    try {
+      const flags = typeof rule.flags === 'string' ? rule.flags : 'i'
+      return currentPath.replace(new RegExp(rule.pattern, flags), rule.replace)
+    } catch (error) {
+      console.warn('[HomepageAnnouncementBoard] linkPathRewriters 配置无效:', rule, error)
+      return currentPath
+    }
+  }, path)
+}
+
 function normalizeAnnouncements(list, channel) {
   return flattenAnnouncementGroups(list)
     .filter(Boolean)
     .map((item, index) => ({
       id: item.id || item.noticeId || item.dynamicId || `${channel}-${index}-${item.title || 'announcement'}`,
       title: item.title || item.name || item.content || '',
-      link: item.link || item.jumpUrl || item.url || '',
-      channel,
+      link: resolveAnnouncementLink(item.link || item.jumpUrl || item.url || ''),
+      icon: '',
+      iconCode: item.iconCode || item.icon_code || item.icon || '',
+      accentColor: resolveAccentColor(channel, index),
+      channel: item.channel || channel,
       resourceType: item.resourceType || item.resource_type || '',
       raw: item,
     }))
@@ -193,13 +360,20 @@ function normalizeAnnouncements(list, channel) {
     .sort((a, b) => resolveTimeValue(b.raw) - resolveTimeValue(a.raw))
 }
 
+function resolveAuthToken() {
+  const cookieToken = useCookie('token').value
+  if (cookieToken) return cookieToken
+  if (!process.client) return ''
+  return localStorage.getItem('token') || localStorage.getItem('Token') || ''
+}
+
 async function requestAnnouncementList(path, query) {
   if (!path) return []
 
-  const token = useCookie('token').value || localStorage.getItem('token') || ''
+  const token = resolveAuthToken()
   const res = await $fetch(path, {
     method: props.requestMethod,
-    baseURL: fetchConfig.baseURL,
+    baseURL: resolvedBaseURL.value,
     query,
     headers: {
       appid: fetchConfig.headers.appid,
@@ -235,17 +409,106 @@ async function fetchAnnouncements() {
   }
 }
 
+function normalizeIconCode(iconCode) {
+  return String(iconCode || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_')
+}
+
+function resolveAnnouncementIcon(item) {
+  const normalizedCode = normalizeIconCode(item?.iconCode || item?.icon)
+  if (normalizedCode && announcementIconMap[normalizedCode]) {
+    return announcementIconMap[normalizedCode]
+  }
+  return announcementIconMap.default
+}
+
+function resolveDotStyle(item) {
+  return {
+    background: item?.accentColor || defaultAnnouncementColors[0],
+  }
+}
+
+function resolveTitleStyle(item) {
+  const color = item?.accentColor || defaultAnnouncementColors[0]
+  return {
+    color,
+    '--notice-link-hover-color': resolveHoverColor(color),
+  }
+}
+
+function resolveIconStyle(item) {
+  return {
+    color: item?.accentColor || defaultAnnouncementColors[0],
+  }
+}
+
+function resolveHoverColor(color) {
+  const normalizedColor = normalizeHexColor(color)
+  if (!normalizedColor) {
+    return '#1d4ed8'
+  }
+
+  const { r, g, b } = normalizedColor
+  const brightness = (r * 299 + g * 587 + b * 114) / 1000
+
+  if (brightness < 96) {
+    return mixHexColor(normalizedColor, { r: 37, g: 99, b: 235 }, 0.45)
+  }
+
+  return mixHexColor(normalizedColor, { r: 17, g: 24, b: 39 }, 0.28)
+}
+
+function normalizeHexColor(color) {
+  const value = String(color || '').trim()
+  if (!/^#([\da-f]{3}|[\da-f]{6})$/i.test(value)) {
+    return null
+  }
+
+  const hex = value.length === 4
+    ? `#${value[1]}${value[1]}${value[2]}${value[2]}${value[3]}${value[3]}`
+    : value
+
+  return {
+    r: Number.parseInt(hex.slice(1, 3), 16),
+    g: Number.parseInt(hex.slice(3, 5), 16),
+    b: Number.parseInt(hex.slice(5, 7), 16),
+  }
+}
+
+function mixHexColor(baseColor, mixColor, ratio) {
+  const weight = Math.min(Math.max(Number(ratio) || 0, 0), 1)
+  const channels = ['r', 'g', 'b']
+  const hex = channels.map((channel) => {
+    const base = baseColor?.[channel] ?? 0
+    const mix = mixColor?.[channel] ?? 0
+    const value = Math.round(base + (mix - base) * weight)
+    return value.toString(16).padStart(2, '0')
+  }).join('')
+
+  return `#${hex}`
+}
+
+function buildTrackStyle(paused, durationSeconds) {
+  const seconds = Number(durationSeconds)
+  return {
+    animationDuration: `${Number.isFinite(seconds) && seconds > 0 ? seconds : 600}s`,
+    animationPlayState: paused ? 'paused' : 'running',
+  }
+}
+
 onMounted(() => {
   fetchAnnouncements()
 })
 
 watch(
-  () => [props.noticeApiPath, props.dynamicApiPath, props.requestMethod, props.noticeQuery, props.dynamicQuery],
+  () => [props.noticeApiPath, props.dynamicApiPath, props.apiBaseURL, props.requestMethod, props.noticeQuery, props.dynamicQuery, props.noticeAccentColors, props.dynamicAccentColors],
   fetchAnnouncements,
   { deep: true }
 )
 
-watch(homepageAnnouncementRefreshFlag, (value) => {
+watch(() => props.refreshTrigger, (value) => {
   if (process.client && props.enableWsRefresh && value) {
     fetchAnnouncements()
   }
@@ -264,18 +527,20 @@ watch(homepageAnnouncementRefreshFlag, (value) => {
   display: flex;
   align-items: center;
   height: 40px;
-  gap: 0;
   overflow: hidden;
+  border-radius: 8px;
+}
+
+.notice-bar-system {
   background: linear-gradient(90deg, #fef9c3 0%, #fef3c7 40%, #fce7f3 100%);
   border: 1.5px solid #fbbf24;
-  border-radius: 8px;
   box-shadow: 0 2px 8px rgba(251, 191, 36, 0.15);
 }
 
-.notice-bar-2 {
+.notice-bar-dynamic {
   margin-top: 8px;
   background: linear-gradient(90deg, #ecfdf5 0%, #e0f2fe 40%, #ede9fe 100%);
-  border-color: #6ee7b7;
+  border: 1.5px solid #6ee7b7;
   box-shadow: 0 2px 8px rgba(16, 185, 129, 0.15);
 }
 
@@ -284,7 +549,6 @@ watch(homepageAnnouncementRefreshFlag, (value) => {
   align-items: center;
   gap: 6px;
   padding: 4px 12px 4px 10px;
-  background: linear-gradient(135deg, #f59e0b, #f97316);
   border-radius: 0 8px 8px 0;
   color: #fff;
   font-size: 12px;
@@ -294,11 +558,15 @@ watch(homepageAnnouncementRefreshFlag, (value) => {
   margin-right: 16px;
   letter-spacing: 0.08em;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.notice-label-system {
+  background: linear-gradient(135deg, #f59e0b, #f97316);
   box-shadow: 2px 0 12px rgba(249, 115, 22, 0.35);
   animation: label-pulse 3s ease-in-out infinite;
 }
 
-.notice-label-2 {
+.notice-label-dynamic {
   background: linear-gradient(135deg, #10b981, #06b6d4);
   box-shadow: 2px 0 12px rgba(16, 185, 129, 0.35);
 }
@@ -326,7 +594,7 @@ watch(homepageAnnouncementRefreshFlag, (value) => {
   display: flex;
   align-items: center;
   white-space: nowrap;
-  animation: notice-scroll 60s linear infinite;
+  animation: notice-scroll linear infinite;
 }
 
 .notice-scroll-track.is-static {
@@ -337,37 +605,52 @@ watch(homepageAnnouncementRefreshFlag, (value) => {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  padding-right: 8px;
   font-size: 14px;
   font-weight: 600;
-  color: #111827;
-  padding-right: 8px;
 }
 
 .notice-dot {
   width: 8px;
   height: 8px;
   border-radius: 999px;
-  background: #f59e0b;
   flex-shrink: 0;
 }
 
-.notice-bar-2 .notice-dot {
-  background: #10b981;
+.notice-icon {
+  font-size: 14px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.notice-link,
+.notice-text {
+  display: inline-flex;
+  align-items: center;
 }
 
 .notice-link {
-  color: #111827;
   text-decoration: none;
-  transition: color 0.2s ease;
+  transition: color 0.18s ease, text-decoration-color 0.18s ease, opacity 0.18s ease;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  text-decoration-color: transparent;
 }
 
 .notice-link:hover {
-  color: #ea580c;
-  text-decoration: underline;
+  opacity: 1;
+  color: var(--notice-link-hover-color, #1d4ed8) !important;
+  text-decoration-color: currentColor;
 }
 
-.notice-bar-2 .notice-link:hover {
-  color: #059669;
+.notice-link:hover .notice-title {
+  color: inherit;
+}
+
+.notice-title {
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 .notice-sep {

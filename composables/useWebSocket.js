@@ -12,11 +12,11 @@ export const useWsStatus = () => useState('ws_status', () => 'disconnected')
 export const useProjectAnnouncements = () => useState('ws_project_announcements', () => [])
 export const useToolUserNoticeRefreshFlag = () => useState('ws_tool_user_notice_refresh', () => 0)
 export const useHomepageAnnouncementRefreshFlag = () => useState('ws_homepage_announcement_refresh', () => 0)
+export const useAnnouncementRefreshFlags = () => useState('ws_announcement_refresh_flags', () => ({}))
 
 const BROADCAST_TYPES = new Set([
   'NEW_OPEN_PROJECT',
   'TOOL_USER_NOTICE_REFRESH',
-  'HOMEPAGE_ANNOUNCEMENT_REFRESH',
   'SECKILL_NOTICE_UPDATE',
   'SECKILL_DYNAMIC_NEW',
 ])
@@ -54,17 +54,41 @@ function parseJsonSafely(value) {
   }
 }
 
-function isHomepageRefreshMessage(msg) {
-  if (msg.type !== 'HOMEPAGE_ANNOUNCEMENT_REFRESH') {
-    return false
-  }
-
-  if (msg.bizId === 'homepage') {
-    return true
+function getAnnouncementRefreshPayload(msg) {
+  if (!msg) {
+    return null
   }
 
   const contentPayload = parseJsonSafely(msg.content)
-  return contentPayload?.module === 'homepage'
+  const moduleName = String(contentPayload?.module || '').trim()
+  const messageType = String(msg.type || '').trim()
+  const actionName = String(contentPayload?.action || '').trim()
+  const shouldRefresh = contentPayload?.refresh === true
+
+  if (!moduleName || !messageType || !actionName || !shouldRefresh) {
+    return null
+  }
+
+  return {
+    module: moduleName,
+    action: actionName,
+    type: messageType,
+    refresh: true,
+    noticeApi: contentPayload?.noticeApi || '',
+    dynamicApi: contentPayload?.dynamicApi || '',
+  }
+}
+
+export function buildAnnouncementRefreshKey(type, moduleName, action) {
+  const normalizedType = String(type || '').trim()
+  const normalizedModule = String(moduleName || '').trim()
+  const normalizedAction = String(action || '').trim()
+
+  if (!normalizedType || !normalizedModule || !normalizedAction) {
+    return ''
+  }
+
+  return `${normalizedType}::${normalizedModule}::${normalizedAction}`
 }
 
 export function useWebSocket() {
@@ -74,6 +98,7 @@ export function useWebSocket() {
   const projectAnnouncements = useProjectAnnouncements()
   const toolUserNoticeRefreshFlag = useToolUserNoticeRefreshFlag()
   const homepageAnnouncementRefreshFlag = useHomepageAnnouncementRefreshFlag()
+  const announcementRefreshFlags = useAnnouncementRefreshFlags()
 
   function connect() {
     if (!process.client) return
@@ -110,7 +135,8 @@ export function useWebSocket() {
           read: false,
         }
 
-        const isBroadcast = BROADCAST_TYPES.has(msg.type)
+        const announcementRefreshPayload = getAnnouncementRefreshPayload(msg)
+        const isBroadcast = BROADCAST_TYPES.has(msg.type) || Boolean(announcementRefreshPayload)
 
         if (!isBroadcast) {
           notifications.value.unshift(msg)
@@ -138,8 +164,26 @@ export function useWebSocket() {
           }
         }
 
-        if (isHomepageRefreshMessage(msg)) {
-          homepageAnnouncementRefreshFlag.value = Date.now()
+        if (announcementRefreshPayload) {
+          const refreshTime = Date.now()
+          const refreshKey = buildAnnouncementRefreshKey(
+            announcementRefreshPayload.type,
+            announcementRefreshPayload.module,
+            announcementRefreshPayload.action,
+          )
+
+          if (!refreshKey) {
+            return
+          }
+
+          announcementRefreshFlags.value = {
+            ...announcementRefreshFlags.value,
+            [refreshKey]: refreshTime,
+          }
+
+          if (announcementRefreshPayload.module === 'homepage') {
+            homepageAnnouncementRefreshFlag.value = refreshTime
+          }
         }
       } catch (e) {
         console.error('[WS] 消息解析失败', e)
@@ -202,6 +246,7 @@ export function useWebSocket() {
     projectAnnouncements,
     toolUserNoticeRefreshFlag,
     homepageAnnouncementRefreshFlag,
+    announcementRefreshFlags,
   }
 }
 

@@ -35,6 +35,16 @@ export async function apiGetMemberPlans() {
   return unwrapMemberResponse(res)
 }
 
+export async function apiGetHomepageMemberPlans() {
+  const res = await $fetch('/homepage/member/plans', {
+    baseURL: fetchConfig.baseURL,
+    headers: {
+      appid: fetchConfig.headers.appid,
+    },
+  })
+  return unwrapMemberResponse(res)
+}
+
 export async function apiCreateMemberCheckout(body) {
   try {
     const res = await $fetch('/user/member/checkout', {
