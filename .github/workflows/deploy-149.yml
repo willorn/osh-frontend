@@ -7,10 +7,12 @@ on:
       git_ref:
         description: 'Commit SHA or branch to build and deploy'
         required: true
+        default: 'release/20260628'
       slot:
         description: 'green=待命槽位 | blue=切流后同步蓝'
         required: true
         type: choice
+        default: 'green'
         options:
           - green
           - blue
