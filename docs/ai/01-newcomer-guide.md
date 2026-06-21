@@ -56,7 +56,7 @@ Harness 会：
 - 运行测试。
 - 汇报结果。
 
-我们通过 `AGENTS.md`、`docs/ai/codex-harness.md`、PR 模板和 CI，让 harness 不乱跑。
+我们通过 `AGENTS.md`、`docs/ai/03-codex-harness.md`、PR 模板和 CI，让 harness 不乱跑。
 
 ### 1.4 Superpowers 是什么
 
@@ -106,7 +106,7 @@ docs/ai/               AI 开发规范和新人教程
 
 1. `docs/ai/README.md`
 2. `openspec/project.md`
-3. `docs/ai/architecture.md`
+3. `docs/ai/04-architecture.md`
 4. `docs/ai/conventions/vue-nuxt.md`
 5. `docs/ai/conventions/api-client.md`
 6. `CODE_REVIEW.md`
