@@ -13,12 +13,13 @@ export const useProjectAnnouncements = () => useState('ws_project_announcements'
 export const useToolUserNoticeRefreshFlag = () => useState('ws_tool_user_notice_refresh', () => 0)
 export const useHomepageAnnouncementRefreshFlag = () => useState('ws_homepage_announcement_refresh', () => 0)
 export const useAnnouncementRefreshFlags = () => useState('ws_announcement_refresh_flags', () => ({}))
-
+
 const BROADCAST_TYPES = new Set([
   'NEW_OPEN_PROJECT',
   'TOOL_USER_NOTICE_REFRESH',
   'SECKILL_NOTICE_UPDATE',
   'SECKILL_DYNAMIC_NEW',
+  'ANNOUNCEMENT_REFRESH',
 ])
 
 let _ws = null
@@ -99,7 +100,6 @@ export function useWebSocket() {
   const toolUserNoticeRefreshFlag = useToolUserNoticeRefreshFlag()
   const homepageAnnouncementRefreshFlag = useHomepageAnnouncementRefreshFlag()
   const announcementRefreshFlags = useAnnouncementRefreshFlags()
-
   function connect() {
     if (!process.client) return
     if (_ws && (_ws.readyState === WebSocket.CONNECTING || _ws.readyState === WebSocket.OPEN)) return
