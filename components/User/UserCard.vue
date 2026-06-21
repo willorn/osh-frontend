@@ -1,5 +1,5 @@
 <template>
-  <span v-bind="attrs" class="user-card-host" :class="{ 'is-card-enabled': canOpenCard }" @click.stop="openCard">
+  <span v-bind="attrs" class="user-card-host" @click.stop="openCard">
     <slot>
       <button type="button" class="user-card-trigger">{{ displayName }}</button>
     </slot>
@@ -47,7 +47,6 @@
 <script setup>
 import { NAvatar, NModal, NSpin, NTag } from 'naive-ui'
 import { DEFAULT_AVATAR } from '~/composables/user'
-import { getUserMemberLevel } from '~/composables/useAuth'
 
 defineOptions({ inheritAttrs: false })
 
@@ -64,10 +63,8 @@ const attrs = useAttrs()
 const defaultAvatar = DEFAULT_AVATAR
 
 const displayName = computed(() => props.username || props.githubAccount || '查看名片')
-const canOpenCard = computed(() => getUserMemberLevel() >= 4)
 
 async function openCard() {
-  if (!canOpenCard.value) return
   visible.value = true
   if (card.value || loading.value) return
   loading.value = true
@@ -105,37 +102,6 @@ function getAuthHeaders() {
 <style scoped>
 .user-card-host {
   display: inline-flex;
-  vertical-align: middle;
-  transform-origin: center;
-  transition: filter 0.18s ease, transform 0.18s ease;
-}
-
-.user-card-host.is-card-enabled {
-  cursor: pointer;
-}
-
-.user-card-host.is-card-enabled:hover {
-  animation: user-card-wiggle 0.42s ease-in-out;
-  filter: drop-shadow(0 4px 10px rgba(37, 99, 235, 0.16));
-}
-
-.user-card-host.is-card-enabled:active {
-  transform: scale(0.98);
-}
-
-@keyframes user-card-wiggle {
-  0%, 100% { transform: translateX(0) rotate(0); }
-  20% { transform: translateX(-1px) rotate(-1deg); }
-  40% { transform: translateX(2px) rotate(1deg); }
-  60% { transform: translateX(-2px) rotate(-1deg); }
-  80% { transform: translateX(1px) rotate(1deg); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .user-card-host.is-card-enabled:hover {
-    animation: none;
-    transform: translateY(-1px);
-  }
 }
 
 .user-card-trigger {

@@ -1,17 +1,15 @@
 <template>
   <div class="open-project-page">
-    <HomepageAnnouncementBoard v-bind="openProjectAnnouncementBoardProps" />
+    <OpenProjectAnnouncementBar />
 
     <div class="page-head">
-      <n-breadcrumb><n-breadcrumb-item>开源项目</n-breadcrumb-item></n-breadcrumb>
-      <div class="head-actions">
-        <n-button secondary @click="openTechLibraryModal">
-          技术组件库
-        </n-button>
-        <n-button type="primary" secondary @click="openSourceModal">
-          查看数据源
-        </n-button>
-      </div>
+      <n-breadcrumb>
+        <n-breadcrumb-item><nuxt-link to="/">首页</nuxt-link></n-breadcrumb-item>
+        <n-breadcrumb-item>开源项目</n-breadcrumb-item>
+      </n-breadcrumb>
+      <n-button type="primary" secondary @click="openSourceModal">
+        查看数据源
+      </n-button>
     </div>
 
     <OpenProjectSearch :tag-options="tagOptions" :source-options="sourceOptions" @search="handleSearch" />
@@ -211,7 +209,7 @@
                           <n-button type="primary" size="small" @click.stop="goGithub(detailData)">
                             访问 GitHub
                           </n-button>
-                          <n-button v-if="detailData.canEditCore || detailData.canEditCollaboration || detailData.canEdit" size="small" secondary @click.stop="openEditModal(detailData)">
+                          <n-button v-if="detailData.canEdit" size="small" secondary @click.stop="openEditModal(detailData)">
                             编辑
                           </n-button>
                           <n-dropdown
@@ -374,62 +372,8 @@
       </template>
     </n-modal>
 
-    <n-modal v-model:show="techLibraryModalVisible" preset="card" title="技术组件库" class="tech-library-modal">
-      <div class="source-toolbar">
-        <n-input v-model:value="techLibraryKeyword" clearable placeholder="搜索组件名称或描述" @keyup.enter="loadTechComponents" />
-        <n-button @click="loadTechComponents">刷新</n-button>
-      </div>
-
-      <div class="tech-library-list">
-        <div v-for="component in techComponentLibrary" :key="component.id" class="tech-library-item">
-          <div class="tech-library-main">
-            <strong>{{ component.componentName }}</strong>
-            <span>{{ component.componentDesc || '暂无描述' }}</span>
-            <a v-if="component.officialUrl" :href="component.officialUrl" target="_blank" rel="noopener noreferrer">{{ component.officialUrl }}</a>
-          </div>
-          <div v-if="canManageOpenProject" class="source-actions">
-            <n-button size="small" @click="editTechComponent(component)">编辑</n-button>
-            <n-button size="small" type="error" secondary @click="deleteTechComponent(component.id)">删除</n-button>
-          </div>
-        </div>
-        <n-empty v-if="!techComponentLibrary.length && !techLibraryLoading" description="暂无技术组件" />
-        <div v-if="techLibraryLoading" class="detail-loading"><n-spin size="small" /> 加载中...</div>
-      </div>
-
-      <n-alert v-if="!canManageOpenProject" type="info" :bordered="false">
-        当前账号可查看技术组件库，level>=4 用户可新增、编辑和删除。
-      </n-alert>
-
-      <section v-else class="source-form-section">
-        <div class="source-form-head">
-          <strong>{{ techComponentForm.id ? '编辑组件' : '新增组件' }}</strong>
-          <n-button v-if="techComponentForm.id" size="small" quaternary @click="resetTechComponentForm">取消编辑</n-button>
-        </div>
-        <n-form :model="techComponentForm" label-placement="left" label-width="110px" class="modal-form">
-          <n-form-item label="组件名称">
-            <n-input v-model:value="techComponentForm.componentName" placeholder="例如 Spring Boot" />
-          </n-form-item>
-          <n-form-item label="组件描述">
-            <n-input v-model:value="techComponentForm.componentDesc" type="textarea" :rows="2" placeholder="可选" />
-          </n-form-item>
-          <n-form-item label="官网/文档链接">
-            <n-input v-model:value="techComponentForm.officialUrl" placeholder="可选" />
-          </n-form-item>
-        </n-form>
-        <div class="modal-actions">
-          <n-button @click="resetTechComponentForm">清空</n-button>
-          <n-button type="primary" :loading="savingTechComponent" @click="saveTechComponent">保存组件</n-button>
-        </div>
-      </section>
-    </n-modal>
-
     <n-modal v-model:show="editModalVisible" preset="card" title="编辑开源项目" class="edit-modal">
       <n-form :model="editForm" label-placement="left" label-width="104px">
-        <div v-if="editForm.canEditCore" class="edit-section">
-          <div class="edit-section-head">
-            <strong>核心信息</strong>
-            <span>项目名称、作者、封面、描述、最高负责人和开发团队</span>
-          </div>
         <n-form-item label="项目名称">
           <n-input v-model:value="editForm.projectName" />
         </n-form-item>
@@ -441,6 +385,16 @@
         </n-form-item>
         <n-form-item label="描述">
           <n-input v-model:value="editForm.projectDesc" type="textarea" :rows="4" />
+        </n-form-item>
+        <n-form-item label="标签">
+          <n-select
+            v-model:value="editForm.tagValues"
+            multiple
+            filterable
+            tag
+            :options="tagOptions"
+            placeholder="选择已有标签，或输入新标签后回车"
+          />
         </n-form-item>
         <n-form-item label="最高负责人">
           <n-select
@@ -463,23 +417,6 @@
             </div>
             <n-button dashed size="small" @click="addContributor">添加贡献人</n-button>
           </div>
-        </n-form-item>
-        </div>
-
-        <div v-if="editForm.canEditCollaboration" class="edit-section">
-          <div class="edit-section-head">
-            <strong>协作配置</strong>
-            <span>标签、项目模块、技术组件和绑定资源</span>
-          </div>
-        <n-form-item label="标签">
-          <n-select
-            v-model:value="editForm.tagValues"
-            multiple
-            filterable
-            tag
-            :options="tagOptions"
-            placeholder="选择已有标签，或输入新标签后回车"
-          />
         </n-form-item>
         <n-form-item label="项目模块">
           <div class="module-editor">
@@ -511,28 +448,12 @@
         <n-form-item label="技术组件">
           <div class="tech-editor">
             <div v-for="(component, idx) in editForm.techComponents" :key="component.localKey" class="tech-row">
-              <n-select
-                v-model:value="component.componentId"
-                filterable
-                :options="techComponentOptions"
-                placeholder="从技术组件库选择"
-                @update:value="value => selectProjectTechComponent(idx, value)"
-              />
-              <span class="tech-preview">{{ component.componentDesc || '暂无描述' }}</span>
-              <a
-                v-if="component.officialUrl"
-                :href="component.officialUrl"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="tech-preview-link"
-              >官网/文档</a>
-              <span v-else class="tech-preview muted">无链接</span>
+              <n-input v-model:value="component.componentName" placeholder="组件名称，例如 Spring Boot" />
+              <n-input v-model:value="component.componentDesc" placeholder="组件描述" />
+              <n-input v-model:value="component.officialUrl" placeholder="官网/文档链接" />
               <n-button text type="error" @click="removeTechComponent(idx)">删除</n-button>
             </div>
-            <div class="tech-editor-actions">
-              <n-button dashed size="small" @click="addTechComponent">引用技术组件</n-button>
-              <n-button size="small" quaternary @click="openTechLibraryModal">维护组件库</n-button>
-            </div>
+            <n-button dashed size="small" @click="addTechComponent">添加技术组件</n-button>
           </div>
         </n-form-item>
         <n-form-item label="绑定资源">
@@ -557,7 +478,6 @@
             <n-button dashed size="small" @click="addEditResource">添加资源</n-button>
           </div>
         </n-form-item>
-        </div>
       </n-form>
 
       <template #footer>
@@ -577,35 +497,13 @@ import {
 } from 'naive-ui'
 import { computed, reactive, ref, onMounted } from 'vue'
 import { getUserMemberLevel } from '~/composables/useAuth'
-import { buildAnnouncementRefreshKey } from '~/composables/useWebSocket'
 
 const { message, dialog } = createDiscreteApi(['message', 'dialog'])
-const { announcementRefreshFlags } = useWebSocket()
 const defaultCover = 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png'
-const openProjectAnnouncementBoardProps = computed(() => ({
-  moduleName: '开源项目模块',
-  noticeApiPath: '/openproject/announcement/notice',
-  dynamicApiPath: '/openproject/announcement/dynamic',
-  noticeQuery: { limit: 5 },
-  dynamicQuery: { limit: 5 },
-  noticeLabel: '通知',
-  dynamicLabel: '公告',
-  noticeScrollDurationSeconds: 180,
-  dynamicScrollDurationSeconds: 180,
-  noticeAccentColors: ['#0f766e', '#2563eb', '#4f46e5'],
-  dynamicAccentColors: ['#059669', '#0891b2', '#7c3aed'],
-  refreshWsType: 'ANNOUNCEMENT_REFRESH',
-  refreshTrigger: announcementRefreshFlags.value[
-    buildAnnouncementRefreshKey('ANNOUNCEMENT_REFRESH', 'openproject', 'refresh')
-  ] || 0,
-}))
 
 const projectList = ref([])
 const tagOptions = ref([])
 const sourceList = ref([])
-const techComponentLibrary = ref([])
-const techLibraryLoading = ref(false)
-const techLibraryKeyword = ref('')
 const loading = ref(false)
 const total = ref(0)
 const currentPage = ref(1)
@@ -629,9 +527,6 @@ const syncingSourceId = ref(null)
 const editingSourceId = ref(null)
 const sourceCreateForm = reactive(emptySourceForm())
 const sourceEditForm = reactive(emptySourceForm())
-const techLibraryModalVisible = ref(false)
-const savingTechComponent = ref(false)
-const techComponentForm = reactive(emptyTechComponentForm())
 
 const editModalVisible = ref(false)
 const savingEdit = ref(false)
@@ -653,12 +548,6 @@ const moduleMemberRoleOptions = [
   { label: '主要开发', value: 'primary' },
   { label: '协同开发', value: 'collaborator' },
 ]
-
-const techComponentOptions = computed(() => techComponentLibrary.value.map(item => ({
-  label: item.componentName,
-  value: Number(item.id),
-  raw: item,
-})))
 
 const contributorOptions = computed(() => {
   const seen = new Set()
@@ -765,67 +654,6 @@ async function loadTags() {
 async function loadSources() {
   const res = await apiGetOpenProjectSources()
   sourceList.value = res?.data || res || []
-}
-
-async function loadTechComponents() {
-  techLibraryLoading.value = true
-  try {
-    const res = await apiGetOpenProjectTechComponents({ keyword: techLibraryKeyword.value || undefined })
-    techComponentLibrary.value = res?.data || res || []
-  } finally {
-    techLibraryLoading.value = false
-  }
-}
-
-async function openTechLibraryModal() {
-  techLibraryModalVisible.value = true
-  await loadTechComponents()
-}
-
-function editTechComponent(component) {
-  Object.assign(techComponentForm, {
-    id: component.id,
-    componentName: component.componentName || '',
-    componentDesc: component.componentDesc || '',
-    officialUrl: component.officialUrl || '',
-    sortOrder: component.sortOrder || 0,
-  })
-}
-
-function resetTechComponentForm() {
-  Object.assign(techComponentForm, emptyTechComponentForm())
-}
-
-async function saveTechComponent() {
-  if (!techComponentForm.componentName?.trim()) {
-    message.warning('请填写组件名称')
-    return
-  }
-  savingTechComponent.value = true
-  try {
-    await apiSaveOpenProjectTechComponent({ ...techComponentForm })
-    message.success('技术组件已保存')
-    resetTechComponentForm()
-    await loadTechComponents()
-  } catch (e) {
-    message.error(e?.data?.msg || '保存失败')
-  } finally {
-    savingTechComponent.value = false
-  }
-}
-
-function deleteTechComponent(id) {
-  dialog.warning({
-    title: '删除技术组件',
-    content: '删除后，已引用该组件的开源项目会自动解绑。确认删除吗？',
-    positiveText: '删除',
-    negativeText: '取消',
-    onPositiveClick: async () => {
-      await apiDeleteOpenProjectTechComponent(id)
-      message.success('已删除')
-      await loadTechComponents()
-    },
-  })
 }
 
 async function loadList() {
@@ -974,9 +802,6 @@ async function syncAllSources() {
 }
 
 async function openEditModal(project) {
-  if (!techComponentLibrary.value.length) {
-    await loadTechComponents().catch(() => {})
-  }
   const source = await apiGetOpenProjectDetail(project.id).catch(() => null)
   const detail = source?.data || source || project
   const tags = detail.tagIds || []
@@ -993,8 +818,6 @@ async function openEditModal(project) {
     originalLeaderGithubAccount: normalizeGithubOwner(detail.leader?.githubAccount || detail.contributors?.find(item => item.contributorType === 'primary')?.githubAccount),
     modules: (detail.modules || []).map(toEditableModule),
     techComponents: (detail.techComponents || []).map(toEditableTechComponent),
-    canEditCore: Boolean(detail.canEditCore ?? detail.canEdit),
-    canEditCollaboration: Boolean(detail.canEditCollaboration ?? detail.canEdit),
   })
   if (!editForm.contributors.length) addContributor()
   editModalVisible.value = true
@@ -1145,17 +968,6 @@ function addTechComponent() {
   })
 }
 
-function selectProjectTechComponent(index, componentId) {
-  const row = editForm.techComponents[index]
-  const component = techComponentLibrary.value.find(item => Number(item.id) === Number(componentId))
-  if (!row || !component) return
-  row.componentId = Number(component.id)
-  row.componentName = component.componentName || ''
-  row.componentCode = component.componentCode || ''
-  row.componentDesc = component.componentDesc || ''
-  row.officialUrl = component.officialUrl || ''
-}
-
 function removeTechComponent(index) {
   editForm.techComponents.splice(index, 1)
 }
@@ -1293,79 +1105,68 @@ async function saveProjectEdit() {
     const customTags = editForm.tagValues.filter(v => typeof v === 'string' && v.trim())
     const normalizedLeader = normalizeGithubOwner(editForm.leaderGithubAccount)
     const contributorAccounts = contributorOptions.value.map(item => item.value.toLowerCase())
-
-    if (!editForm.canEditCore && !editForm.canEditCollaboration) {
-      message.warning('当前账号没有可保存的编辑权限')
+    if (!contributorAccounts.length) {
+      message.warning('请至少保留一名开发团队成员')
       return
     }
-
-    if (editForm.canEditCore) {
-      if (!contributorAccounts.length) {
-        message.warning('请至少保留一名开发团队成员')
-        return
-      }
-      if (!normalizedLeader || !contributorAccounts.includes(normalizedLeader.toLowerCase())) {
-        message.warning('最高负责人必须从开发团队中选择')
-        return
-      }
-      await apiEditOpenProjectCore({
-        id: editForm.id,
-        projectName: editForm.projectName,
-        projectDesc: editForm.projectDesc,
-        authorName: editForm.authorName,
-        projectCover: editForm.projectCover,
-        contributors: editForm.contributors
-          .filter(item => item.profileUrl?.trim() || item.githubAccount?.trim())
-          .map((item, idx) => ({
-            ...item,
-            githubAccount: normalizeGithubOwner(item.profileUrl || item.githubAccount),
-            profileUrl: buildGithubProfileUrl(item.profileUrl || item.githubAccount),
-            contributorType: 'contributor',
-            sortOrder: idx,
-          })),
-      })
-      if (normalizedLeader && normalizedLeader !== editForm.originalLeaderGithubAccount) {
-        await apiTransferOpenProjectLeader({
-          projectId: editForm.id,
-          githubAccount: normalizedLeader,
-        })
-      }
+    if (!normalizedLeader || !contributorAccounts.includes(normalizedLeader.toLowerCase())) {
+      message.warning('最高负责人必须从开发团队中选择')
+      return
     }
-
-    if (editForm.canEditCollaboration) {
-      await apiEditOpenProjectCollaboration({
-        id: editForm.id,
-        tagIds,
-        customTags,
-        resources: editForm.resources
-          .filter(r => r.resourceId)
-          .map(({ resourceType, resourceId, resourceName, resourceUrl }) => ({ resourceType, resourceId, resourceName, resourceUrl })),
-        modules: editForm.modules
-          .filter(item => item.moduleName?.trim())
-          .map((module, idx) => ({
-            id: module.id,
-            moduleName: module.moduleName,
-            moduleDesc: module.moduleDesc,
-            sortOrder: idx,
-            members: (module.members || [])
-              .filter(member => member.githubAccount)
-              .map((member, memberIdx) => ({
-                contributorId: member.contributorId,
-                githubAccount: normalizeGithubOwner(member.githubAccount),
-                wechatName: member.wechatName,
-                memberRole: member.memberRole === 'primary' ? 'primary' : 'collaborator',
-                sortOrder: memberIdx,
-              })),
-          })),
-        techComponents: editForm.techComponents
-          .filter(item => item.componentId)
-          .map((item, idx) => ({
-            componentId: item.componentId,
-            sortOrder: idx,
-          })),
+    await apiEditOpenProject({
+      id: editForm.id,
+      projectName: editForm.projectName,
+      projectDesc: editForm.projectDesc,
+      authorName: editForm.authorName,
+      projectCover: editForm.projectCover,
+      tagIds,
+      customTags,
+      resources: editForm.resources
+        .filter(r => r.resourceId)
+        .map(({ resourceType, resourceId, resourceName, resourceUrl }) => ({ resourceType, resourceId, resourceName, resourceUrl })),
+      contributors: editForm.contributors
+        .filter(item => item.profileUrl?.trim() || item.githubAccount?.trim())
+        .map((item, idx) => ({
+          ...item,
+          githubAccount: normalizeGithubOwner(item.profileUrl || item.githubAccount),
+          profileUrl: buildGithubProfileUrl(item.profileUrl || item.githubAccount),
+          contributorType: 'contributor',
+          sortOrder: idx,
+        })),
+      modules: editForm.modules
+        .filter(item => item.moduleName?.trim())
+        .map((module, idx) => ({
+          id: module.id,
+          moduleName: module.moduleName,
+          moduleDesc: module.moduleDesc,
+          sortOrder: idx,
+          members: (module.members || [])
+            .filter(member => member.githubAccount)
+            .map((member, memberIdx) => ({
+              contributorId: member.contributorId,
+              githubAccount: normalizeGithubOwner(member.githubAccount),
+              wechatName: member.wechatName,
+              memberRole: member.memberRole === 'primary' ? 'primary' : 'collaborator',
+              sortOrder: memberIdx,
+            })),
+        })),
+      techComponents: editForm.techComponents
+        .filter(item => item.componentName?.trim())
+        .map((item, idx) => ({
+          componentId: item.componentId,
+          componentName: item.componentName,
+          componentCode: item.componentCode,
+          componentDesc: item.componentDesc,
+          officialUrl: item.officialUrl,
+          sortOrder: idx,
+        })),
+    })
+    if (normalizedLeader && normalizedLeader !== editForm.originalLeaderGithubAccount) {
+      await apiTransferOpenProjectLeader({
+        projectId: editForm.id,
+        githubAccount: normalizedLeader,
       })
     }
-
     message.success('开源项目已保存')
     editModalVisible.value = false
     await loadTags()
@@ -1374,16 +1175,6 @@ async function saveProjectEdit() {
     message.error(e?.data?.msg || '保存失败')
   } finally {
     savingEdit.value = false
-  }
-}
-
-function emptyTechComponentForm() {
-  return {
-    id: null,
-    componentName: '',
-    componentDesc: '',
-    officialUrl: '',
-    sortOrder: 0,
   }
 }
 
@@ -1456,8 +1247,6 @@ function emptyEditForm() {
     originalLeaderGithubAccount: '',
     modules: [],
     techComponents: [],
-    canEditCore: false,
-    canEditCollaboration: false,
   }
 }
 
@@ -1484,144 +1273,74 @@ function formatDate(raw) {
 }
 
 onMounted(async () => {
-  await Promise.all([loadTags(), loadSources(), loadTechComponents()])
+  await Promise.all([loadTags(), loadSources()])
   loadList()
 })
 </script>
 
 <style scoped>
-.open-project-page {
-  width: 100vw;
-  min-height: 100vh;
-  margin-left: calc(-50vw + 50%);
-  padding: 24px 0 48px;
-  box-sizing: border-box;
-  color: #17313a;
-  background:
-    linear-gradient(115deg, rgba(14, 37, 48, 0.48) 0%, rgba(16, 88, 93, 0.28) 24%, rgba(245, 250, 249, 0.44) 54%, rgba(255, 255, 255, 0.76) 100%),
-    url('/images/openproject/openproject-bg.png') center top / cover no-repeat fixed;
-}
-.open-project-page::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(circle at 12% 18%, rgba(11, 184, 184, 0.14), transparent 34%),
-    linear-gradient(90deg, rgba(5, 23, 31, 0.18), transparent 44%);
-  z-index: 0;
-}
-.open-project-page > * {
-  position: relative;
-  z-index: 1;
-  width: min(1400px, calc(100vw - 40px));
-  margin-left: auto;
-  margin-right: auto;
-  box-sizing: border-box;
-}
-.page-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  width: min(1400px, calc(100vw - 40px));
-  margin: 14px auto 18px;
-  padding: 12px 14px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.56);
-  background: rgba(255, 255, 255, 0.58);
-  box-shadow: 0 18px 44px rgba(9, 42, 52, 0.10);
-  backdrop-filter: blur(14px);
-}
-.page-head :deep(.n-breadcrumb .n-breadcrumb-item),
-.page-head :deep(.n-breadcrumb .n-breadcrumb-item a) { color: #1f3d48; font-weight: 600; }
-.head-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
-.head-actions :deep(.n-button) { box-shadow: 0 8px 18px rgba(15, 118, 110, 0.10); }
-.page-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; align-items: start; }
+.open-project-page { max-width: 1400px; margin: 0 auto; padding: 20px; }
+.page-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+.page-layout { display: grid; grid-template-columns: 1fr 300px; gap: 24px; align-items: start; }
 .list-area { min-width: 0; }
 .rank-area { position: sticky; top: 80px; }
 .content-area { min-height: 400px; }
-.empty-box {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 300px;
-  border-radius: 8px;
-  border: 1px dashed rgba(20, 184, 166, 0.32);
-  background: rgba(255, 255, 255, 0.64);
-  backdrop-filter: blur(12px);
-}
+.empty-box { display: flex; justify-content: center; align-items: center; height: 300px; }
 .project-grid { display: flex; flex-direction: column; gap: 16px; margin-top: 24px; }
-.project-card {
-  border-radius: 8px;
-  box-shadow: 0 16px 42px rgba(13, 40, 50, 0.11);
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.90), rgba(244, 252, 251, 0.76));
-  border: 1px solid rgba(31, 111, 124, 0.18);
-  cursor: pointer;
-  overflow: hidden;
-  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease;
-  backdrop-filter: blur(16px);
-}
-.project-card:hover {
-  box-shadow: 0 24px 58px rgba(13, 58, 70, 0.18);
-  border-color: rgba(20, 184, 166, 0.54);
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(232, 252, 248, 0.84));
-  transform: translateY(-2px);
-}
-.project-card.expanded { border-color: rgba(14, 165, 164, 0.76); transform: none; }
-.project-card.archived { opacity: 0.76; }
+.project-card { border-radius: 8px; box-shadow: 0 2px 8px rgba(15,23,42,0.05); background: #fff; border: 1px solid #e2e8f0; cursor: pointer; overflow: hidden; transition: all 0.2s ease; }
+.project-card:hover { box-shadow: 0 8px 24px rgba(15,23,42,0.08); border-color: #94a3b8; transform: translateY(-1px); }
+.project-card.expanded { border-color: #3b82f6; transform: none; }
+.project-card.archived { opacity: 0.72; }
 .card-inner { display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; padding: 18px 24px; }
 .card-header { grid-column: 1; display: flex; flex-direction: column; gap: 8px; }
 .title-row { display: flex; align-items: center; gap: 10px; }
-.expand-icon { color: #4b8792; font-size: 26px; line-height: 1; transition: transform 0.2s ease, color 0.2s ease; }
-.expand-icon.open { transform: rotate(90deg); color: #0f948c; }
-.project-title { font-size: 16px; font-weight: 700; color: #102a36; }
+.expand-icon { color: #94a3b8; font-size: 26px; line-height: 1; transition: transform 0.2s ease; }
+.expand-icon.open { transform: rotate(90deg); color: #3b82f6; }
+.project-title { font-size: 16px; font-weight: 600; color: #1e293b; }
 .project-tags { display: flex; gap: 6px; flex-wrap: wrap; padding-left: 28px; }
-.project-tags :deep(.n-tag) { border-color: rgba(20, 184, 166, 0.28); background: rgba(204, 251, 241, 0.62); color: #0f766e; }
 .card-body { grid-column: 1; grid-row: 2; padding: 8px 0 0 28px; }
-.project-desc { font-size: 13px; color: #496670; line-height: 1.6; margin: 0; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+.project-desc { font-size: 13px; color: #64748b; line-height: 1.6; margin: 0; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
 .card-footer { grid-column: 2; grid-row: 1 / 3; display: flex; flex-direction: column; align-items: flex-end; justify-content: space-between; padding-left: 28px; min-width: 150px; }
-.author-info { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 3px 8px; border-radius: 999px; background: rgba(236, 254, 255, 0.70); color: #28515b; }
-.author-name { color: #315965; }
+.author-info { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.author-name { color: #64748b; }
 .footer-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
-.github-stats { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; font-size: 12px; color: #41636e; }
+.github-stats { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; font-size: 12px; color: #64748b; }
 .stat-item { display: flex; align-items: center; justify-content: flex-end; }
-.last-commit { color: #7d929a; font-size: 11px; }
-.card-detail { border-top: 1px solid rgba(20, 184, 166, 0.18); background: rgba(244, 251, 250, 0.82); padding: 20px 24px; }
-.detail-loading { display: flex; align-items: center; gap: 8px; color: #52717b; font-size: 13px; }
-.detail-grid { display: grid; grid-template-columns: minmax(0, 1fr) 250px; gap: 28px; }
-.detail-section-title { font-size: 12px; font-weight: 700; color: #0f766e; margin-bottom: 10px; letter-spacing: 0; }
-.detail-desc { font-size: 14px; color: #2f4852; line-height: 1.8; white-space: pre-wrap; margin: 0; }
+.last-commit { color: #9ca3af; font-size: 11px; }
+.card-detail { border-top: 1px solid #edf2f7; background: #f8fafc; padding: 20px 24px; }
+.detail-loading { display: flex; align-items: center; gap: 8px; color: #64748b; font-size: 13px; }
+.detail-grid { display: grid; grid-template-columns: 1fr 250px; gap: 28px; }
+.detail-section-title { font-size: 12px; font-weight: 600; color: #64748b; margin-bottom: 10px; }
+.detail-desc { font-size: 14px; color: #334155; line-height: 1.8; white-space: pre-wrap; margin: 0; }
 .contributors { margin-top: 22px; }
 .contributor-list { display: flex; gap: 8px; flex-wrap: wrap; }
-.contributor { display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; border-radius: 999px; background: rgba(224, 242, 254, 0.74); color: #274654; text-decoration: none; font-size: 12px; border: 1px solid rgba(14, 165, 164, 0.14); }
-.contributor:hover { background: rgba(204, 251, 241, 0.88); border-color: rgba(20, 184, 166, 0.34); }
-.github-copy-link { border: 0; padding: 0; background: transparent; color: #28515b; font: inherit; cursor: pointer; }
-.github-copy-link:hover { color: #0f766e; text-decoration: underline; }
-.contributor small { color: #607d86; }
+.contributor { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 999px; background: #eef2ff; color: #334155; text-decoration: none; font-size: 12px; }
+.contributor:hover { background: #e0e7ff; }
+.github-copy-link { border: 0; padding: 0; background: transparent; color: #475569; font: inherit; cursor: pointer; }
+.github-copy-link:hover { color: #1d4ed8; text-decoration: underline; }
+.contributor small { color: #64748b; }
 .module-list, .tech-list { margin-top: 22px; }
-.module-card { border: 1px solid rgba(31, 111, 124, 0.16); border-radius: 8px; background: rgba(255, 255, 255, 0.78); padding: 12px; margin-bottom: 8px; box-shadow: inset 3px 0 0 rgba(20, 184, 166, 0.28); }
+.module-card { border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; padding: 12px; margin-bottom: 8px; }
 .module-head { display: flex; flex-direction: column; gap: 4px; }
-.module-head strong { color: #12313c; font-size: 13px; }
-.module-head span { color: #5e747d; font-size: 12px; line-height: 1.5; }
+.module-head strong { color: #1e293b; font-size: 13px; }
+.module-head span { color: #64748b; font-size: 12px; line-height: 1.5; }
 .module-members { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-.module-member { display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; border-radius: 999px; background: rgba(241, 245, 249, 0.82); color: #334155; font-size: 12px; border: 1px solid rgba(148, 163, 184, 0.22); }
-.module-member:hover { background: rgba(224, 242, 254, 0.88); }
+.module-member { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 999px; background: #f1f5f9; color: #334155; font-size: 12px; }
 .module-member small { color: #64748b; }
 .tech-tags { display: flex; flex-wrap: wrap; gap: 8px; }
-.tech-tag { display: inline-flex; align-items: center; padding: 5px 10px; border-radius: 999px; background: rgba(236, 254, 255, 0.82); color: #0f766e; font-size: 12px; text-decoration: none; border: 1px solid rgba(45, 212, 191, 0.58); transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease; }
+.tech-tag { display: inline-flex; align-items: center; padding: 5px 10px; border-radius: 999px; background: #ecfeff; color: #0f766e; font-size: 12px; text-decoration: none; border: 1px solid #99f6e4; }
 .tech-tag-desc { cursor: help; }
 .tech-tag-link { cursor: pointer; }
-.tech-tag-link:hover { color: #0f3f3d; background: #ccfbf1; border-color: #14b8a6; }
-.detail-meta { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; padding: 12px; border-radius: 8px; background: rgba(255, 255, 255, 0.58); border: 1px solid rgba(31, 111, 124, 0.14); }
+.tech-tag-link:hover { color: #115e59; background: #ccfbf1; border-color: #5eead4; }
+.detail-meta { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
 .dm-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 13px; }
-.dm-label { color: #7b929b; }
-.dm-value { color: #12313c; font-weight: 600; text-align: right; }
-.dm-value.star { color: #d97706; }
-.dm-value.muted { color: #78909a; }
+.dm-label { color: #94a3b8; }
+.dm-value { color: #1e293b; font-weight: 500; text-align: right; }
+.dm-value.star { color: #f59e0b; }
+.dm-value.muted { color: #9ca3af; }
 .detail-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
-.pagination-wrapper { display: flex; justify-content: center; margin-top: 32px; padding: 12px; border-radius: 8px; background: rgba(255, 255, 255, 0.54); backdrop-filter: blur(12px); }
-.source-modal, .edit-modal, .tech-library-modal { width: min(1040px, 94vw); }
+.pagination-wrapper { display: flex; justify-content: center; margin-top: 32px; }
+.source-modal, .edit-modal { width: min(1040px, 94vw); }
 .source-toolbar { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 14px; }
 .source-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 18px; max-height: 320px; overflow: auto; }
 .source-item { display: flex; justify-content: space-between; gap: 16px; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; }
@@ -1641,22 +1360,7 @@ onMounted(async () => {
 .source-form-head strong { font-size: 14px; color: #1e293b; }
 .modal-form { padding-top: 0; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 16px; }
-.edit-section { border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px; margin-bottom: 16px; background: rgba(248, 250, 252, 0.74); }
-.edit-section-head { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-bottom: 14px; }
-.edit-section-head strong { color: #0f172a; font-size: 14px; }
-.edit-section-head span { color: #64748b; font-size: 12px; }
 .resource-editor, .contributor-editor, .module-editor, .tech-editor { width: 100%; display: flex; flex-direction: column; gap: 8px; }
-.tech-library-list { display: flex; flex-direction: column; gap: 10px; max-height: 360px; overflow: auto; margin-bottom: 18px; }
-.tech-library-item { display: flex; justify-content: space-between; gap: 16px; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; }
-.tech-library-main { min-width: 0; display: flex; flex-direction: column; gap: 4px; color: #475569; }
-.tech-library-main strong { color: #0f172a; }
-.tech-library-main a { color: #2563eb; text-decoration: none; word-break: break-all; }
-.tech-library-main a:hover { text-decoration: underline; }
-.tech-editor-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-.tech-preview { min-width: 0; color: #64748b; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tech-preview.muted { color: #94a3b8; }
-.tech-preview-link { color: #2563eb; text-decoration: none; font-size: 12px; }
-.tech-preview-link:hover { text-decoration: underline; }
 .resource-row { display: grid; grid-template-columns: 120px 1.2fr 1fr auto; gap: 8px; align-items: center; }
 .resource-preview { min-width: 0; color: #64748b; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .contributor-row { display: grid; grid-template-columns: 100px 1fr 1fr 130px auto; gap: 8px; align-items: center; }
@@ -1664,7 +1368,7 @@ onMounted(async () => {
 .module-edit-head { display: grid; grid-template-columns: 180px 1fr auto; gap: 8px; align-items: center; margin-bottom: 10px; }
 .module-member-editor { display: flex; flex-direction: column; gap: 8px; }
 .module-member-row { display: grid; grid-template-columns: 1fr 130px 1fr auto; gap: 8px; align-items: center; }
-.tech-row { display: grid; grid-template-columns: 220px 1fr 90px auto; gap: 8px; align-items: center; }
+.tech-row { display: grid; grid-template-columns: 180px 1fr 1fr auto; gap: 8px; align-items: center; }
 .expand-enter-active, .expand-leave-active { transition: max-height 0.25s ease, opacity 0.2s ease; max-height: 640px; overflow: hidden; }
 .expand-enter-from, .expand-leave-to { max-height: 0; opacity: 0; }
 @media (max-width: 1024px) {
@@ -1672,15 +1376,11 @@ onMounted(async () => {
   .rank-area { order: -1; position: static; }
 }
 @media (max-width: 760px) {
-  .open-project-page { width: 100%; margin-left: 0; padding: 16px 0 36px; background-attachment: scroll; }
-  .open-project-page > * { width: calc(100% - 24px); }
-  .page-head { width: calc(100% - 24px); align-items: flex-start; flex-direction: column; }
   .card-inner, .detail-grid { grid-template-columns: 1fr; }
   .card-footer { grid-column: 1; grid-row: auto; align-items: flex-start; padding: 14px 0 0 28px; }
   .footer-right { align-items: flex-start; }
   .github-stats { align-items: flex-start; }
   .resource-row, .contributor-row, .module-edit-head, .module-member-row, .tech-row { grid-template-columns: 1fr; }
-  .source-item, .tech-library-item { flex-direction: column; }
-  .head-actions { justify-content: flex-start; }
+  .source-item { flex-direction: column; }
 }
 </style>

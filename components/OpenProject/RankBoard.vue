@@ -105,50 +105,30 @@ onMounted(loadRank)
 
 <style scoped>
 .rank-board {
-  background: rgba(255, 255, 255, 0.76);
+  background: #fff;
   border-radius: 8px;
-  border: 1px solid rgba(20, 184, 166, 0.18);
+  border: 1px solid #eee;
   overflow: hidden;
-  box-shadow: 0 18px 46px rgba(8, 40, 50, 0.12);
-  backdrop-filter: blur(16px);
 }
 
 .rank-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding: 12px 14px;
-  border-bottom: 1px solid rgba(20, 184, 166, 0.16);
-  background: linear-gradient(135deg, rgba(17, 94, 89, 0.92), rgba(14, 116, 144, 0.78));
+  padding: 12px 16px;
+  border-bottom: 1px solid #f0f0f0;
+  background: #fafafa;
 }
 
 .rank-title {
-  display: inline-flex;
-  align-items: center;
-  flex: 0 0 auto;
-  min-width: 72px;
   font-size: 14px;
-  font-weight: 700;
-  color: #f8fafc;
-  line-height: 1.35;
-  white-space: nowrap;
+  font-weight: 600;
+  color: #333;
 }
 
 .rank-controls {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 6px;
-  min-width: 0;
-}
-
-.rank-header :deep(.n-button) {
-  --n-color: rgba(255, 255, 255, 0.15) !important;
-  --n-color-hover: rgba(255, 255, 255, 0.24) !important;
-  --n-text-color: #f8fafc !important;
-  --n-border: 1px solid rgba(255, 255, 255, 0.20) !important;
 }
 
 .rank-loading, .rank-empty {
@@ -156,40 +136,41 @@ onMounted(loadRank)
   justify-content: center;
   align-items: center;
   height: 120px;
-  color: #5f7780;
+  color: #999;
   font-size: 13px;
 }
 
-.rank-list { padding: 6px 0; }
+.rank-list { padding: 4px 0; }
 
 .rank-item {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 11px 14px;
+  padding: 10px 16px;
   cursor: pointer;
-  transition: background 0.15s ease, transform 0.15s ease;
-  border-bottom: 1px solid rgba(31, 111, 124, 0.10);
+  transition: background 0.15s;
+  border-bottom: 1px solid #f5f5f5;
 }
 .rank-item:last-child { border-bottom: none; }
-.rank-item:hover { background: rgba(204, 251, 241, 0.42); transform: translateX(2px); }
+.rank-item:hover { background: #f0f5ff; }
 
+/* 排名徽章 */
 .rank-badge {
-  width: 25px;
-  height: 25px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
   flex-shrink: 0;
-  background: #e2e8f0;
-  color: #536570;
+  background: #e5e7eb;
+  color: #6b7280;
 }
-.rank-badge.gold { background: #fef3c7; color: #b45309; box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.12); }
-.rank-badge.silver { background: #e8eef5; color: #526575; box-shadow: 0 0 0 3px rgba(100, 116, 139, 0.10); }
-.rank-badge.bronze { background: #ffedd5; color: #c2410c; box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.10); }
+.rank-badge.gold   { background: #fef3c7; color: #d97706; }
+.rank-badge.silver { background: #f1f5f9; color: #64748b; }
+.rank-badge.bronze { background: #fef2e8; color: #c2410c; }
 
 .rank-info {
   flex: 1;
@@ -197,15 +178,15 @@ onMounted(loadRank)
 }
 .rank-name {
   font-size: 13px;
-  font-weight: 700;
-  color: #17313a;
+  font-weight: 500;
+  color: #333;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .rank-desc {
   font-size: 11px;
-  color: #6f838b;
+  color: #9ca3af;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -219,11 +200,11 @@ onMounted(loadRank)
 .increment-val {
   display: block;
   font-size: 14px;
-  font-weight: 800;
-  color: #0f9f6e;
+  font-weight: 700;
+  color: #16a34a;
 }
 .increment-label {
   font-size: 11px;
-  color: #78909a;
+  color: #9ca3af;
 }
 </style>
