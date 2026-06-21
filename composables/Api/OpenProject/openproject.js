@@ -40,12 +40,6 @@ export const apiGetOpenProjectDetail = (id) =>
 export const apiEditOpenProject = (data) =>
   opFetch(`${BASE}/edit`, { method: 'POST', body: data })
 
-export const apiEditOpenProjectCore = (data) =>
-  opFetch(`${BASE}/edit/core`, { method: 'POST', body: data })
-
-export const apiEditOpenProjectCollaboration = (data) =>
-  opFetch(`${BASE}/edit/collaboration`, { method: 'POST', body: data })
-
 export const apiTransferOpenProjectLeader = (data) =>
   opFetch(`${BASE}/leader/transfer`, { method: 'POST', body: data })
 
@@ -75,12 +69,3 @@ export const apiSyncAllOpenProjectSources = () =>
 
 export const apiSearchOpenProjectResources = (params) =>
   opFetch(`${BASE}/resource/search`, { params })
-
-export const apiGetOpenProjectTechComponents = (params = {}) =>
-  opFetch(`${BASE}/tech-components`, { params })
-
-export const apiSaveOpenProjectTechComponent = (data) =>
-  opFetch(`${BASE}/tech-components/save`, { method: 'POST', body: data })
-
-export const apiDeleteOpenProjectTechComponent = (id) =>
-  opFetch(`${BASE}/tech-components/delete`, { method: 'POST', params: { id } })
