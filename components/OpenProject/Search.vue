@@ -116,6 +116,13 @@ function handleSearch() {
 .filter-row { margin-bottom: 12px; }
 .source-select { width: 220px; }
 .tag-select { width: 260px; }
-.keyword-input { width: 220px; }
-.sort-label { font-size: 13px; color: #666; }
+.keyword-input { width: 240px; }
+.sort-label { font-size: 13px; color: #315965; font-weight: 600; }
+.compact-filter :deep(.n-button) { border-radius: 6px; }
+@media (max-width: 760px) {
+  .source-select,
+  .tag-select,
+  .keyword-input { width: min(100%, 320px); }
+  .compact-filter :deep(.n-space > div) { max-width: 100%; }
+}
 </style>
