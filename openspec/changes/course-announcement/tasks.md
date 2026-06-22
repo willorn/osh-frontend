@@ -22,3 +22,7 @@
 
 - [x] PR 描述关联 `openspec/changes/course-announcement`。
 - [x] 填写验证结果。
+
+## 部署流水线验证
+
+- [x] course 模块加无副作用注释，走 feature → qa 合并，验证 25 测试服务器自动部署流程。

@@ -1,4 +1,5 @@
 // composables/Api/Course/course.js
+// Course module APIs (announcement, list, detail, etc.)
 // 1. 获取基础地址
 const baseURL = fetchConfig.baseURL; // 已经是 http://localhost:8081/pc
 const APP_ID = 'bd9d01ecc75dbbaaefce';
