@@ -493,6 +493,22 @@ export async function apiSyncCoursesToEs() {
   });
 }
 
+export async function apiCourseSystemAnnouncements() {
+  return $fetch('/course/announcement/systemNotice/latest', {
+    method: 'GET',
+    baseURL: fetchConfig.baseURL,
+    headers: getAuthHeaders(),
+  });
+}
+
+export async function apiCourseUserAnnouncements() {
+  return $fetch('/course/announcement/userNotice/latest', {
+    method: 'GET',
+    baseURL: fetchConfig.baseURL,
+    headers: getAuthHeaders(),
+  });
+}
+
 /** 小节 freeFlag 归一化：1=免费试看，0=付费 */
 export function normalizeSectionFreeFlag(value) {
   if (value === 1 || value === true || value === '1') return 1;

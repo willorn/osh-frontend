@@ -11,12 +11,14 @@ export const useUnreadCount = () => useState('ws_unread', () => 0)
 export const useWsStatus = () => useState('ws_status', () => 'disconnected')
 export const useProjectAnnouncements = () => useState('ws_project_announcements', () => [])
 export const useToolUserNoticeRefreshFlag = () => useState('ws_tool_user_notice_refresh', () => 0)
+export const useCourseUserNoticeRefreshFlag = () => useState('ws_course_user_notice_refresh', () => 0)
 export const useHomepageAnnouncementRefreshFlag = () => useState('ws_homepage_announcement_refresh', () => 0)
 export const useAnnouncementRefreshFlags = () => useState('ws_announcement_refresh_flags', () => ({}))
-
+
 const BROADCAST_TYPES = new Set([
   'NEW_OPEN_PROJECT',
   'TOOL_USER_NOTICE_REFRESH',
+  'COURSE_USER_NOTICE_REFRESH',
   'SECKILL_NOTICE_UPDATE',
   'SECKILL_DYNAMIC_NEW',
   'ANNOUNCEMENT_REFRESH',
@@ -98,6 +100,7 @@ export function useWebSocket() {
   const wsStatus = useWsStatus()
   const projectAnnouncements = useProjectAnnouncements()
   const toolUserNoticeRefreshFlag = useToolUserNoticeRefreshFlag()
+  const courseUserNoticeRefreshFlag = useCourseUserNoticeRefreshFlag()
   const homepageAnnouncementRefreshFlag = useHomepageAnnouncementRefreshFlag()
   const announcementRefreshFlags = useAnnouncementRefreshFlags()
   function connect() {
@@ -160,6 +163,19 @@ export function useWebSocket() {
               }))
             } catch (err) {
               console.error('[WS] 工具公告提示派发失败', err)
+            }
+          }
+        }
+
+        if (msg.type === 'COURSE_USER_NOTICE_REFRESH') {
+          courseUserNoticeRefreshFlag.value = Date.now()
+          if (process.client && msg.title) {
+            try {
+              window.dispatchEvent(new CustomEvent('course-announcement-toast', {
+                detail: { title: msg.title },
+              }))
+            } catch (err) {
+              console.error('[WS] 课程公告提示派发失败', err)
             }
           }
         }
@@ -245,6 +261,7 @@ export function useWebSocket() {
     clearAll,
     projectAnnouncements,
     toolUserNoticeRefreshFlag,
+    courseUserNoticeRefreshFlag,
     homepageAnnouncementRefreshFlag,
     announcementRefreshFlags,
   }
