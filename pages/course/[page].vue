@@ -5,6 +5,71 @@
       <span class="bc-sep">›</span>
       <span class="bc-current">📚 课程</span>
     </div>
+
+    <section class="course-notice-section">
+      <div class="course-notice-row">
+        <span class="course-notice-label is-system">系统通知</span>
+        <div class="course-notice-body">
+          <div
+            v-if="courseSystemAnnouncements.length > 0"
+            class="course-notice-scroll"
+            :style="{ animationPlayState: systemAnnouncementPaused ? 'paused' : 'running' }"
+            @mouseenter="systemAnnouncementPaused = true"
+            @mouseleave="systemAnnouncementPaused = false"
+          >
+            <span
+              v-for="(item, index) in duplicatedSystemAnnouncements"
+              :key="`system-${item.id}-${index}`"
+              class="course-notice-item"
+            >
+              <a
+                v-if="hasAnnouncementLink(item)"
+                class="course-notice-link"
+                :href="resolveAnnouncementHref(item)"
+                @click.prevent="handleAnnouncementClick(item)"
+              >
+                {{ item.title }}
+              </a>
+              <span v-else>{{ item.title }}</span>
+              <span class="course-notice-sep">｜</span>
+            </span>
+          </div>
+          <span v-else class="course-notice-empty">暂无系统通知</span>
+        </div>
+      </div>
+
+      <div class="course-notice-row">
+        <span class="course-notice-label is-user">课程动态</span>
+        <div class="course-notice-body">
+          <div
+            v-if="courseUserAnnouncements.length > 0"
+            class="course-notice-scroll"
+            :style="{ animationPlayState: userAnnouncementPaused ? 'paused' : 'running' }"
+            @mouseenter="userAnnouncementPaused = true"
+            @mouseleave="userAnnouncementPaused = false"
+          >
+            <span
+              v-for="(item, index) in duplicatedUserAnnouncements"
+              :key="`user-${item.id}-${index}`"
+              class="course-notice-item"
+            >
+              <a
+                v-if="hasAnnouncementLink(item)"
+                class="course-notice-link"
+                :href="resolveAnnouncementHref(item)"
+                @click.prevent="handleAnnouncementClick(item)"
+              >
+                {{ item.title }}
+              </a>
+              <span v-else>{{ item.title }}</span>
+              <span class="course-notice-sep">｜</span>
+            </span>
+          </div>
+          <span v-else class="course-notice-empty">暂无课程动态</span>
+        </div>
+      </div>
+    </section>
+
     <CourseFilter
       v-model:modelValue="queryParams"
       :tag-options="tagOptions"
@@ -90,15 +155,31 @@
     <CourseEditModal v-model:show="showCreateModal" :tag-options="tagOptions" @success="handleCreateSuccess" />
   </div>
 </template><script setup>
-import { ref, reactive, computed, onMounted, onActivated } from 'vue';
+import { ref, reactive, computed, onMounted, onActivated, watch } from 'vue';
 import { createDiscreteApi } from 'naive-ui';
 import CourseEditModal from '~/components/Course/CourseEditModal.vue';
 import CourseFilter from '~/components/Course/CourseFilter.vue';
 import CourseCard from '~/components/Course/CourseCard.vue';
 import { NGrid, NGi, NPagination } from 'naive-ui';
 import { fetchConfig } from '~/composables/useHttp';
-import { apiCollectCourse, apiRemoveCollect, apiGetCoverUrls, apiSyncCoursesToEs, apiHideCourses, getAuthHeaders } from '~/composables/Api/Course/course';
+import {
+  apiCollectCourse,
+  apiRemoveCollect,
+  apiGetCoverUrls,
+  apiSyncCoursesToEs,
+  apiHideCourses,
+  apiCourseSystemAnnouncements,
+  apiCourseUserAnnouncements,
+  getAuthHeaders,
+} from '~/composables/Api/Course/course';
 import { getUserMemberLevel } from '~/composables/useAuth';
+
+const { courseUserNoticeRefreshFlag } = useWebSocket();
+
+const courseSystemAnnouncements = ref([]);
+const courseUserAnnouncements = ref([]);
+const systemAnnouncementPaused = ref(false);
+const userAnnouncementPaused = ref(false);
 
 const { hasPermission, permissionList } = usePermission();
 
@@ -234,8 +315,61 @@ async function refreshCoverUrls() {
   }
 }
 
+const duplicatedSystemAnnouncements = computed(() => courseSystemAnnouncements.value.length > 1
+  ? [...courseSystemAnnouncements.value, ...courseSystemAnnouncements.value]
+  : courseSystemAnnouncements.value);
+const duplicatedUserAnnouncements = computed(() => courseUserAnnouncements.value.length > 1
+  ? [...courseUserAnnouncements.value, ...courseUserAnnouncements.value]
+  : courseUserAnnouncements.value);
+
+const hasAnnouncementLink = (item) => !!item?.link && String(item.link).trim() !== '';
+
+const resolveAnnouncementHref = (item) => {
+  const link = String(item?.link || '').trim();
+  if (!link) return '#';
+  if (link.startsWith('http://') || link.startsWith('https://')) {
+    return link;
+  }
+  return link.startsWith('/') ? link : `/${link}`;
+};
+
+const handleAnnouncementClick = (item) => {
+  const link = String(item?.link || '').trim();
+  if (!link) return;
+  if (link.startsWith('http://') || link.startsWith('https://')) {
+    window.open(link, '_blank', 'noopener,noreferrer');
+    return;
+  }
+  navigateTo(link.startsWith('/') ? link : `/${link}`);
+};
+
+const loadCourseSystemAnnouncements = async () => {
+  try {
+    const res = await apiCourseSystemAnnouncements();
+    courseSystemAnnouncements.value = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+  } catch (e) {
+    console.error('加载课程系统通知失败', e);
+    courseSystemAnnouncements.value = [];
+  }
+};
+
+const loadCourseUserAnnouncements = async () => {
+  try {
+    const res = await apiCourseUserAnnouncements();
+    courseUserAnnouncements.value = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+  } catch (e) {
+    console.error('加载课程业务公告失败', e);
+    courseUserAnnouncements.value = [];
+  }
+};
+
+const reloadCourseAnnouncements = async () => {
+  await Promise.all([loadCourseSystemAnnouncements(), loadCourseUserAnnouncements()]);
+};
+
 onMounted(() => {
   triggerCourseEsSync();
+  reloadCourseAnnouncements();
   loadTags();
   loadCourses();
 });
@@ -244,8 +378,16 @@ onMounted(() => {
 // 补充 onActivated 强制拉新，避免列表卡片仍显示旧状态/旧标题。
 onActivated(() => {
   triggerCourseEsSync();
+  reloadCourseAnnouncements();
   loadTags();
   loadCourses();
+});
+
+watch(courseUserNoticeRefreshFlag, async (value) => {
+  if (!process.client || !value) return;
+  const currentPath = window.location.pathname || '';
+  if (!currentPath.startsWith('/course')) return;
+  await reloadCourseAnnouncements();
 });
 
 // 4. 映射总条数
@@ -490,6 +632,84 @@ const handleDoCollect = async (courseId) => {
 .bc-sep { color: #ddd; user-select: none; }
 .bc-current { color: #333; font-weight: 600; }
 
+.course-notice-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.course-notice-row {
+  display: flex;
+  align-items: center;
+  height: 34px;
+  border-radius: 8px;
+  background: #fafafa;
+  border: 1px solid #ebebeb;
+  overflow: hidden;
+}
+.course-notice-label {
+  flex-shrink: 0;
+  width: 72px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.course-notice-label.is-system {
+  color: #18a058;
+  background: rgba(24, 160, 88, 0.06);
+  border-right: 1px solid #ebebeb;
+}
+.course-notice-label.is-user {
+  color: #666;
+  background: rgba(0, 0, 0, 0.03);
+  border-right: 1px solid #ebebeb;
+}
+.course-notice-body {
+  flex: 1;
+  overflow: hidden;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+}
+.course-notice-scroll {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  animation: course-notice-scroll 50s linear infinite;
+}
+.course-notice-item {
+  display: inline-flex;
+  align-items: center;
+  font-size: 13px;
+  color: #444;
+  padding-right: 4px;
+}
+.course-notice-link {
+  color: #444;
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.course-notice-link:hover {
+  color: #18a058;
+}
+.course-notice-sep {
+  color: #d9d9d9;
+  margin-left: 12px;
+  user-select: none;
+}
+.course-notice-empty {
+  font-size: 13px;
+  color: #bbb;
+}
+@keyframes course-notice-scroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
 
 /* 多选操作栏 */
 .batch-bar {
