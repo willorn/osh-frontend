@@ -16,8 +16,9 @@ env:
   DEPLOY_HOST: ${{ vars.TEST25_DEPLOY_HOST }}
   DEPLOY_USER: ${{ vars.TEST25_DEPLOY_USER || 'root' }}
   DEPLOY_PORT: ${{ vars.TEST25_DEPLOY_PORT }}
-  DEPLOY_PATH: ${{ vars.TEST25_FRONTEND_DEPLOY_PATH || '/www/nginx/html' }}
-  LEGACY_STAGING_PATH: ${{ vars.TEST25_FRONTEND_LEGACY_PATH || '/www/nginx/html' }}
+  # Docker osh-nginx mounts this path; /www/nginx/html is legacy staging only.
+  DEPLOY_PATH: ${{ vars.FRONTEND_DEPLOY_PATH || '/opt/osh/app/osh/osh-frontend/html' }}
+  LEGACY_STAGING_PATH: ${{ vars.FRONTEND_LEGACY_STAGING_PATH || '/www/nginx/html' }}
   NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL || vars.NOTIFY_EMAIL || '1402272093@qq.com' }}
   MAIL_USERNAME: ${{ secrets.MAIL_USERNAME || vars.MAIL_USERNAME || '1402272093@qq.com' }}
   MAIL_SERVER: ${{ vars.MAIL_SERVER || 'smtp.qq.com' }}
