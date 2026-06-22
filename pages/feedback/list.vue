@@ -10,20 +10,8 @@
       </n-breadcrumb>
     </div>
 
-    <!-- 公告区（两列跑马灯：公告 + 动态） -->
-    <section v-if="showAnnouncements" class="notice-section">
-      <AnnouncementMarquee
-        :items="announcements"
-        label="公告"
-        label-icon="📢"
-      />
-      <AnnouncementMarquee
-        :items="announcements2"
-        label="动态"
-        label-icon="📡"
-        variant="secondary"
-      />
-    </section>
+    <!-- 公告区（公共 AnnouncementBoard：公告 + 动态两栏跑马灯） -->
+    <HomepageAnnouncementBoard v-bind="feedbackAnnouncementBoardProps" />
 
     <!-- 模式切换 + 提交反馈 -->
     <div class="view-mode-box">
@@ -193,28 +181,53 @@ import {
   apiGetFeedbackCategories,
   apiGetFeedbackTags,
   apiPageFeedback,
-  apiGetFeedbackAnnouncements,
-  apiGetFeedbackDynamics,
   apiGetPendingConfirmCount,
   resolveFeedbackCategoryIcon,
   resolveFeedbackErrorMessage,
   FEEDBACK_STATUS_CONFIG
 } from '~/composables/assistant'
+import { buildAnnouncementRefreshKey } from '~/composables/useWebSocket'
 import { sortFeedbackTags } from '~/composables/feedbackTag'
 import { applyFeedbackInteractionPatches } from '~/composables/useFeedbackState'
 import FeedbackCard from '~/components/feedback/FeedbackCard.vue'
-import AnnouncementMarquee from '~/components/feedback/AnnouncementMarquee.vue'
+import HomepageAnnouncementBoard from '~/components/Homepage/AnnouncementBoard.vue'
 
 const router = useRouter()
 const message = useMessage()
 const user = useUser()
 const isLoggedIn = computed(() => !!user.value)
+const { announcementRefreshFlags } = useWebSocket()
+
+const feedbackAnnouncementRefreshType = 'ANNOUNCEMENT_REFRESH'
+const feedbackAnnouncementRefreshAction = 'refresh'
+
+/** 反馈公告栏配置（委托公共组件 HomepageAnnouncementBoard 自行 fetch + WS 刷新） */
+const feedbackAnnouncementBoardProps = computed(() => ({
+  moduleName: '反馈模块',
+  noticeApiPath: '/feedback/announcement/list',
+  noticeQuery: { channel: 1, limit: 10 },
+  dynamicApiPath: '/feedback/dynamics/list',
+  dynamicQuery: { limit: 10 },
+  requestMethod: 'GET',
+  noticeLabel: '公告',
+  dynamicLabel: '动态',
+  noticeScrollDurationSeconds: 180,
+  dynamicScrollDurationSeconds: 300,
+  noticeAccentColors: ['#111827', '#1f2937', '#374151', '#4b5563'],
+  dynamicAccentColors: ['#111827', '#1f2937', '#374151', '#4b5563'],
+  enableWsRefresh: true,
+  refreshWsType: feedbackAnnouncementRefreshType,
+  refreshTrigger: announcementRefreshFlags.value[
+    buildAnnouncementRefreshKey(
+      feedbackAnnouncementRefreshType,
+      'feedback',
+      feedbackAnnouncementRefreshAction,
+    )
+  ] || 0,
+}))
 
 const categories = ref([])
 const feedbackTags = ref([])
-const announcements = ref([])
-/** 第二列公告（业务公告 / 动态，channel=2） */
-const announcements2 = ref([])
 const pinnedList = ref([])
 const feedbackList = ref([])
 const queryMode = ref('all')
@@ -289,9 +302,6 @@ const tagOptions = computed(() => feedbackTags.value.map(tag => ({
   label: tag.name,
   value: tag.id
 })))
-// 公告独立于 queryMode 展示,且只在 onMounted 加载一次
-// 任一列有数据即展示公告区
-const showAnnouncements = computed(() => announcements.value.length > 0 || announcements2.value.length > 0)
 const emptyDescription = computed(() => {
   if (queryMode.value === 'mine') {
     return '暂无我的反馈'
@@ -310,7 +320,6 @@ onMounted(() => {
   syncQueryModeFromRoute()
   loadCategories()
   loadTags()
-  loadAnnouncements()
   loadFeedback()
   if (isLoggedIn.value) {
     loadPendingConfirmCount()
@@ -382,21 +391,6 @@ async function loadTags() {
   } catch (error) {
     message.error(resolveFeedbackErrorMessage(error, '加载标签失败'))
     console.error('加载标签失败:', error)
-  }
-}
-
-async function loadAnnouncements() {
-  try {
-    // 并行拉取公告数据和互动动态数据
-    const [announcementRes, dynamicsRes] = await Promise.all([
-      apiGetFeedbackAnnouncements(5),
-      apiGetFeedbackDynamics(10)
-    ])
-    announcements.value = Array.isArray(announcementRes?.data) ? announcementRes.data : []
-    announcements2.value = Array.isArray(dynamicsRes?.data) ? dynamicsRes.data : []
-  } catch (error) {
-    message.error(resolveFeedbackErrorMessage(error, '加载公告失败'))
-    console.error('加载公告失败:', error)
   }
 }
 
@@ -657,14 +651,6 @@ function destroyLoadMoreObserver() {
   margin-bottom: 20px;
 }
 
-/* 两列公告容器（对齐信息差页面 notice-section 布局） */
-.notice-section {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-bottom: 20px;
-}
-
 .view-mode-box {
   display: flex;
   align-items: center;
@@ -747,8 +733,6 @@ function destroyLoadMoreObserver() {
     background-position: -200% 0;
   }
 }
-
-/* 公告样式已迁出至 components/Feedback/AnnouncementMarquee.vue */
 
 /* 筛选器 */
 .filter-box {

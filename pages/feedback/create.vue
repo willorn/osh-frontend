@@ -15,6 +15,9 @@
     <div class="form-container">
       <h1 class="page-title">✍️ 提交反馈</h1>
       <p class="page-desc">请尽量完整描述问题，我们会持续跟进处理。</p>
+      <n-alert v-if="showMissingEmailNotice" type="warning" :show-icon="true" class="email-notice">
+        当前账号未设置邮箱。后续如果反馈状态发生变更，系统将无法向你发送邮件通知。
+      </n-alert>
 
       <n-form ref="formRef" :model="form" :rules="rules" label-placement="top">
         <!-- 分类选择 -->
@@ -131,7 +134,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
-import { NForm, NFormItem, NInput, NButton, NSpace, NBreadcrumb, NBreadcrumbItem, NSelect, NUpload, NUploadDragger, NIcon } from 'naive-ui'
+import { NAlert, NForm, NFormItem, NInput, NButton, NSpace, NBreadcrumb, NBreadcrumbItem, NSelect, NUpload, NUploadDragger, NIcon } from 'naive-ui'
 import { Camera } from '@vicons/ionicons5'
 import {
   apiGetFeedbackCategories,
@@ -181,6 +184,13 @@ const tagOptions = computed(() => tags.value.map(tag => ({
 
 const currentCategoryDescription = computed(() => categories.value
   .find(category => category.id === form.value.categoryId)?.description || '')
+
+const showMissingEmailNotice = computed(() => {
+  if (!user.value) {
+    return false
+  }
+  return !String(user.value.email || '').trim()
+})
 
 const draftStorageKey = computed(() => {
   const currentUserId = user.value?.id || user.value?.userId || user.value?.uid
@@ -910,6 +920,10 @@ function resolveFeedbackSourcePath() {
   margin-top: 8px;
   font-size: 12px;
   color: #94a3b8;
+}
+
+.email-notice {
+  margin-bottom: 20px;
 }
 
 :deep(.n-upload-dragger) {
