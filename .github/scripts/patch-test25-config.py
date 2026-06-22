@@ -36,7 +36,7 @@ def patch_frontend_text(text):
 
 def patch_frontend_dir(root):
     changed = 0
-    for pattern in ("**/*.js", "**/*.html", "**/*.json"):
+    for pattern in ("**/*.js", "**/*.vue", "**/*.html", "**/*.json"):
         for path in glob.glob(os.path.join(root, pattern), recursive=True):
             if "/node_modules/" in path:
                 continue
