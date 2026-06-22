@@ -66,6 +66,10 @@ jobs:
         if: github.event_name != 'push' || github.ref_name == steps.latest_qa.outputs.latest_branch
         run: test -d .output/public && test -f .output/public/index.html
 
+      - name: Patch frontend for test25 HTTPS (8081 → /pc)
+        if: github.event_name != 'push' || github.ref_name == steps.latest_qa.outputs.latest_branch
+        run: python3 .github/scripts/patch-test25-config.py --frontend .output/public
+
       - name: Setup SSH agent
         if: github.event_name != 'push' || github.ref_name == steps.latest_qa.outputs.latest_branch
         uses: webfactory/ssh-agent@v0.9.0
