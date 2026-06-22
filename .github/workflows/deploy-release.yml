@@ -58,6 +58,16 @@ jobs:
         if: github.event_name != 'push' || github.ref_name == steps.latest_qa.outputs.latest_branch
         run: npm ci --legacy-peer-deps
 
+      # Patch source BEFORE build so output filenames get fresh content hashes.
+      # This avoids stale CDN cache: new hashed assets were never cached by Cloudflare,
+      # and index.html is served DYNAMIC (uncached), so deploys take effect without a purge.
+      - name: Patch source for test25 HTTPS (8081 → /pc)
+        if: github.event_name != 'push' || github.ref_name == steps.latest_qa.outputs.latest_branch
+        run: |
+          for d in composables pages components; do
+            [ -d "$d" ] && python3 .github/scripts/patch-test25-config.py --frontend "$d"
+          done
+
       - name: Build static site
         if: github.event_name != 'push' || github.ref_name == steps.latest_qa.outputs.latest_branch
         run: npm run generate
