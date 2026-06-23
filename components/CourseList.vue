@@ -35,7 +35,9 @@ const props = defineProps({
 const open = () => {
     let path = ""
     if(["course","media","audio","video"].includes(props.item.type)){
-        path = `/detail/course/${props.item.id}`
+        // 课程详情走专用页 /course_detail/[id]（调 /pc/course/detail/{id}）；
+        // 通用 /detail/course/* 会请求 /pc/course/getById，后端无此接口会报参数类型错误。
+        path = `/course_detail/${props.item.id}`
     } else if(props.item.type == "column"){
         path = `/detail/column/${props.item.id}`
     } else if(props.item.type == "live"){
